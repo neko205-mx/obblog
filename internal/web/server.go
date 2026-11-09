@@ -118,6 +118,8 @@ func (a *App) Handler() http.Handler {
 	private.HandleFunc("GET /api/publication", a.publicationStatus)
 	private.HandleFunc("PUT /api/publication", a.setPublication)
 	private.HandleFunc("POST /api/publications/refresh", a.refreshPublications)
+	private.HandleFunc("GET /api/blog", a.blogSettings)
+	private.HandleFunc("POST /api/blog", a.blogSettings)
 	// Strip only the admin prefix; no private route is registered at the public root.
 	mux.Handle("/admin/", a.gate(http.StripPrefix("/admin", private)))
 	private.HandleFunc("GET /api/vault", a.tree)
@@ -133,7 +135,7 @@ func (a *App) Handler() http.Handler {
 		if name == "" {
 			name = "index.html"
 		}
-		if name != "index.html" && name != "app.js" && name != "style.css" && name != "graph.js" && name != "graph-model.mjs" && name != "force.js" && name != "editor.js" && name != "editor-model.mjs" {
+		if name != "index.html" && name != "app.js" && name != "style.css" && name != "graph.js" && name != "graph-model.mjs" && name != "force.js" && name != "editor.js" && name != "editor-model.mjs" && name != "blog-model.mjs" {
 			http.NotFound(w, r)
 			return
 		}

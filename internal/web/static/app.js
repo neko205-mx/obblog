@@ -1,5 +1,6 @@
 import { GraphView } from "./graph.js";
 import { NoteEditor } from "./editor.js";
+import { MAX_PAGES, slugify, uniqueSlug, validateBlog } from "./blog-model.mjs";
 
 const $ = (selector) => document.querySelector(selector);
 const state = { vault: null, tabs: [], current: null, note: null, source: false, expanded: new Set(), request: 0, view: "note", graphTab: false };
@@ -225,13 +226,13 @@ function showReading() {
   $("#edit-button").hidden = false;
   $("#graph-button").classList.remove("selected");
   $("#files-button").classList.add("selected");
-  $("#publish-button").disabled = !state.note;
+  $("#panel-publish").disabled = !state.note;
 }
 
 function applySnapshot(snapshot) {
   state.vault = snapshot;
-  $("#settings-button").hidden = !snapshot.managed;
-  $("#end-test-button").hidden = !snapshot.testMode;
+  $("#panel-settings").hidden = !snapshot.managed;
+  $("#panel-end-test").hidden = !snapshot.testMode;
   $("#vault-name").textContent = snapshot.name;
   $("#vault-name").title = snapshot.name;
   $("#vault-count").textContent = `${snapshot.notes.length} 篇笔记 · ${snapshot.attachments} 个附件`;
@@ -278,7 +279,7 @@ async function startEditor(note, isNew = false) {
     } catch (error) { toast(error.message); return; }
   }
   state.view = "edit";
-  $("#publish-button").disabled = true;
+  $("#panel-publish").disabled = true;
   state.current = note.path;
   state.note = note;
   if (!state.tabs.includes(note.path)) state.tabs.push(note.path);
@@ -327,7 +328,7 @@ async function showGraph(local = false, recordHistory = true) {
   if (!await leaveEditor()) return;
   state.request++;
   state.view = "graph";
-  $("#publish-button").disabled = true;
+  $("#panel-publish").disabled = true;
   state.graphTab = true;
   $("#graph-view").hidden = false;
   $("#editor-view").hidden = true;
@@ -348,7 +349,7 @@ async function showGraph(local = false, recordHistory = true) {
 }
 
 function showEmpty(message = "选择一篇笔记", error = false) {
-  $("#publish-button").disabled = true;
+  $("#panel-publish").disabled = true;
   const empty = el("div", "empty-state");
   empty.append(el("h1", "", error ? "无法打开笔记" : "笔记"), el("p", "", message));
   if (error) {
@@ -367,7 +368,7 @@ function showEmpty(message = "选择一篇笔记", error = false) {
 function renderDocument() {
   const note = state.note;
   if (!note) return;
-  $("#publish-button").disabled = false;
+  $("#panel-publish").disabled = false;
   const container = $("#document-container");
   container.replaceChildren();
   if (note.properties && !state.source) {
@@ -453,7 +454,7 @@ async function openNote(path, options = {}) {
   const request = ++state.request;
   state.current = path;
   state.note = null;
-  $("#publish-button").disabled = true;
+  $("#panel-publish").disabled = true;
   $("#edit-button").disabled = true;
   if (!state.tabs.includes(path)) state.tabs.push(path);
   reveal(path);
@@ -543,10 +544,10 @@ $("#search-button").onclick = () => { setPane(true); $("#file-search").focus(); 
 $("#files-button").onclick = () => { setPane(true); $("#file-search").value = ""; renderTree(); };
 $("#edit-button").onclick = () => { if (state.vault?.writable && state.note) startEditor(state.note); };
 $("#new-note-button").onclick = newNote;
-$("#settings-button").onclick = async () => { if (!editor.busy && !gitBusy && await leaveEditor()) location.assign("/admin/settings"); };
-$("#end-test-button").onclick = async () => {
+$("#panel-settings").onclick = async () => { if (!editor.busy && !gitBusy && await leaveEditor()) location.assign("/admin/settings"); };
+$("#panel-end-test").onclick = async () => {
   if (editor.busy || gitBusy) return;
-  const button = $("#end-test-button");
+  const button = $("#panel-end-test");
   button.disabled = true;
   try {
     await api("/admin/api/test/stop", { method: "POST" });
@@ -639,7 +640,7 @@ function renderGit(status) {
   $("#git-check").disabled = gitBusy;
   $("#git-pull").disabled = gitBusy || status.state !== "changed";
   $("#git-push").disabled = gitBusy || !status.canPush;
-  $("#git-manage-button").textContent = `Git 管理 · ${gitLabels[status.state] || status.state}`;
+  $("#panel-git").textContent = `Git 管理 · ${gitLabels[status.state] || status.state}`;
 }
 async function gitOperation(action = "check") {
   if (gitBusy || editor.busy) return;
@@ -669,7 +670,7 @@ async function gitOperation(action = "check") {
 function showAdmin() {
   if (!$("#admin-dialog").open) $("#admin-dialog").showModal();
 }
-$("#admin-button").onclick = $("#git-manage-button").onclick = showAdmin;
+$("#admin-button").onclick = $("#panel-git").onclick = showAdmin;
 $("#admin-close").onclick = () => $("#admin-dialog").close();
 $("#git-check").onclick = () => gitOperation();
 $("#git-pull").onclick = async () => {
@@ -677,8 +678,9 @@ $("#git-pull").onclick = async () => {
   $("#admin-dialog").close(); await gitOperation("pull"); showAdmin();
 };
 $("#git-push").onclick = async () => { $("#admin-dialog").close(); await gitOperation("push"); showAdmin(); };
-$("#logout-button").onclick = async () => {
+$("#panel-logout").onclick = async () => {
   if (gitBusy || editor.busy) return;
+  $("#panel-dialog").close();
   $("#admin-dialog").close();
   if (!await leaveEditor()) return;
   try { await api("/admin/api/logout", { method: "POST" }); location.assign("/admin/login"); }
@@ -704,10 +706,11 @@ function renderPublication() {
   $("#publication-link").hidden = !record?.enabled;
   if (record?.url) $("#publication-link").href = record.url;
 }
-$("#publish-button").onclick = async () => {
+$("#panel-publish").onclick = async () => {
   if (!state.note || state.view !== "note") return;
   const note = state.note;
-  $("#publish-button").disabled = true;
+  $("#panel-dialog").close();
+  $("#panel-publish").disabled = true;
   try {
     const record = await api(`/admin/api/publication?${new URLSearchParams({ path: note.path })}`);
     if (state.note !== note || state.view !== "note") return;
@@ -718,7 +721,7 @@ $("#publish-button").onclick = async () => {
     renderPublication();
     $("#publication-dialog").showModal();
   } catch (error) { toast(error.message); }
-  finally { $("#publish-button").disabled = !state.note || state.view !== "note"; }
+  finally { $("#panel-publish").disabled = !state.note || state.view !== "note"; }
 };
 $("#publication-close").onclick = () => $("#publication-dialog").close();
 $("#publication-dialog").addEventListener("cancel", (event) => { if (publicationBusy) event.preventDefault(); });
@@ -751,3 +754,157 @@ $("#publication-refresh").onclick = async () => {
   } catch (error) { $("#publication-status").textContent = error.message; }
   finally { publicationBusy = false; renderPublication(); }
 };
+
+// --- Panel: blog configuration -------------------------------------------------
+let blogConfig = null;
+let blogBusy = false;
+
+function blogError(message = "") {
+  const node = $("#blog-error");
+  node.textContent = message;
+  node.hidden = !message;
+}
+
+function blogPreview() {
+  const accent = $("#blog-accent").value;
+  const title = $("#blog-title").value.trim() || "未命名博客";
+  const author = $("#blog-author").value.trim();
+  $("#blog-preview").style.setProperty("--preview-accent", accent);
+  $("#blog-preview-text").textContent = author ? `${title} · ${author}` : title;
+}
+
+function makePageRow(page = {}) {
+  const slug = page.slug || "";
+  const row = el("div", "blog-page");
+  row.dataset.createdAt = page.createdAt || "";
+  row.dataset.updatedAt = page.updatedAt || "";
+  const head = el("div", "blog-page-head");
+  const slugWrap = el("label", "blog-page-slug");
+  slugWrap.append(el("span", "", "短地址"));
+  const slugInput = document.createElement("input");
+  slugInput.value = slug;
+  slugInput.placeholder = "about";
+  slugInput.maxLength = 64;
+  slugInput.autocomplete = "off";
+  slugInput.className = "blog-page-slug-input";
+  // Normalize as the author types so the visible value matches what is saved.
+  slugInput.onblur = () => { if (slugInput.value.trim()) slugInput.value = slugify(slugInput.value); };
+  slugWrap.append(slugInput);
+  const titleInput = document.createElement("input");
+  titleInput.value = page.title || "";
+  titleInput.placeholder = "页面标题";
+  titleInput.maxLength = 120;
+  titleInput.autocomplete = "off";
+  titleInput.className = "blog-page-title";
+  head.append(slugWrap, titleInput);
+  const remove = el("button", "blog-page-remove", "删除");
+  remove.type = "button";
+  remove.onclick = () => { row.remove(); if (!blogPagesCount()) $("#blog-pages").append(el("p", "tree-message", "还没有独立页面")); };
+  head.append(remove);
+
+  const source = document.createElement("textarea");
+  source.value = page.source || "";
+  source.rows = 6;
+  source.spellcheck = false;
+  source.className = "blog-page-source";
+  source.setAttribute("aria-label", "页面 Markdown 内容");
+
+  row.append(head, source);
+  row.getValue = () => ({ slug: slugInput.value.trim(), title: titleInput.value.trim(), source: source.value, createdAt: row.dataset.createdAt, updatedAt: row.dataset.updatedAt });
+  return row;
+}
+
+function blogPagesCount() { return $("#blog-pages").querySelectorAll(".blog-page").length; }
+
+function blankPagesMessage() {
+  const empty = $("#blog-pages").querySelector(".tree-message");
+  if (empty) empty.hidden = blogPagesCount() > 0;
+  else if (!blogPagesCount()) $("#blog-pages").append(el("p", "tree-message", "还没有独立页面"));
+}
+
+function renderBlogPages(pages) {
+  const container = $("#blog-pages");
+  container.replaceChildren();
+  for (const page of pages || []) container.append(makePageRow(page));
+  blankPagesMessage();
+}
+
+function renderBlog(config) {
+  blogConfig = config;
+  $("#blog-title").value = config.title || "";
+  $("#blog-description").value = config.description || "";
+  $("#blog-author").value = config.author || "";
+  $("#blog-footer").value = config.footer || "";
+  const accent = $("#blog-accent");
+  accent.replaceChildren();
+  for (const value of config.accents || []) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    option.style.setProperty("--option-accent", value);
+    accent.append(option);
+  }
+  accent.value = config.accent || (config.accents || [])[0] || "";
+  $("#blog-theme").value = config.theme || "auto";
+  renderBlogPages(config.pages);
+  blogPreview();
+  $("#panel-blog-state").textContent = config.vault || "";
+}
+
+function blogPayload() {
+  return {
+    title: $("#blog-title").value.trim(),
+    description: $("#blog-description").value.trim(),
+    author: $("#blog-author").value.trim(),
+    footer: $("#blog-footer").value.trim(),
+    accent: $("#blog-accent").value,
+    theme: $("#blog-theme").value,
+    pages: [...$("#blog-pages").querySelectorAll(".blog-page")].map((row) => row.getValue()),
+  };
+}
+
+$("#blog-title").oninput = $("#blog-accent").onchange = $("#blog-author").oninput = blogPreview;
+$("#blog-add-page").onclick = () => {
+  if (blogPagesCount() >= MAX_PAGES) { blogError(`最多 ${MAX_PAGES} 个独立页面`); return; }
+  blogError();
+  const taken = [...$("#blog-pages").querySelectorAll(".blog-page-slug-input")].map((input) => input.value.trim()).filter(Boolean);
+  const row = makePageRow({ slug: uniqueSlug("page", taken), title: "新页面", source: "" });
+  $("#blog-pages").append(row);
+  blankPagesMessage();
+  row.querySelector(".blog-page-slug-input").focus();
+};
+$("#blog-form").onsubmit = async (event) => {
+  event.preventDefault();
+  if (blogBusy || !blogConfig) return;
+  const payload = blogPayload();
+  const checked = validateBlog(payload);
+  if (!checked.ok) { blogError(checked.error); return; }
+  payload.pages = checked.pages;
+  blogBusy = true;
+  blogError();
+  $("#blog-save").disabled = true;
+  $("#panel-blog-state").textContent = "保存中…";
+  try {
+    const saved = await api("/admin/api/blog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    renderBlog(saved);
+    toast("博客设置已保存");
+  } catch (error) { blogError(error.message); $("#panel-blog-state").textContent = ""; }
+  finally { blogBusy = false; $("#blog-save").disabled = false; }
+};
+
+async function loadBlog() {
+  if (blogConfig) { $("#panel-blog-state").textContent = blogConfig.vault || ""; return; }
+  $("#panel-blog-state").textContent = "读取中…";
+  try { renderBlog(await api("/admin/api/blog")); }
+  catch (error) { blogError(error.message); $("#panel-blog-state").textContent = ""; }
+}
+
+$("#panel-button").onclick = async () => {
+  if (editor.busy || gitBusy) return;
+  if (!await leaveEditor()) return;
+  $("#panel-publish").disabled = !state.note || state.view !== "note";
+  $("#panel-dialog").showModal();
+  loadBlog();
+};
+$("#panel-close").onclick = () => $("#panel-dialog").close();
+$("#panel-dialog").addEventListener("cancel", (event) => { if (blogBusy) event.preventDefault(); });

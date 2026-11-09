@@ -52,6 +52,64 @@ func (a *App) publicationStatus(w http.ResponseWriter, r *http.Request) {
 	respond(w, publicationStatus(article))
 }
 
+// blogConfig is what the settings panel loads. Accents and Themes drive the
+// pickers so the browser never invents a value the server would reject.
+type blogConfig struct {
+	*publication.Blog
+	Accents []string `json:"accents"`
+	Themes  []string `json:"themes"`
+	Vault   string   `json:"vault"`
+}
+
+func (a *App) blogConfigView() blogConfig {
+	blog := a.publications.Blog()
+	if blog == nil {
+		blog = publication.DefaultBlog()
+	}
+	return blogConfig{Blog: blog, Accents: publication.Accents, Themes: []string{"auto", "light", "dark"}, Vault: a.vault.Name}
+}
+
+func (a *App) blogSettings(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		respond(w, a.blogConfigView())
+	case http.MethodPost:
+		a.saveBlogSettings(w, r)
+	default:
+		fail(w, http.StatusMethodNotAllowed, "方法不允许")
+	}
+}
+
+func (a *App) saveBlogSettings(w http.ResponseWriter, r *http.Request) {
+	if a.publications == nil {
+		fail(w, 409, "发布存储不可用")
+		return
+	}
+	var input publication.Blog
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil {
+		var limit *http.MaxBytesError
+		if errors.As(err, &limit) {
+			fail(w, http.StatusRequestEntityTooLarge, "博客配置请求超过大小限制")
+			return
+		}
+		fail(w, http.StatusBadRequest, "无效的博客配置")
+		return
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		fail(w, http.StatusBadRequest, "无效的博客配置")
+		return
+	}
+	cleaned, err := a.publications.SetBlog(input)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respond(w, blogConfig{Blog: cleaned, Accents: publication.Accents, Themes: []string{"auto", "light", "dark"}, Vault: a.vault.Name})
+}
+
 func (a *App) setPublication(w http.ResponseWriter, r *http.Request) {
 	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || media != "application/json" {
@@ -154,12 +212,30 @@ func (a *App) updatePublications(ctx context.Context) error {
 
 var publicTemplates = template.Must(template.New("public").Funcs(template.FuncMap{
 	"postURL": publication.URL,
+	"pageURL": publication.PageURL,
 	"date":    func(t time.Time) string { return t.In(time.FixedZone("CST", 8*60*60)).Format("2006-01-02") },
 	"isoDate": func(t time.Time) string { return t.Format(time.RFC3339) },
 }).ParseFS(assets, "static/public.html"))
 
+// blogShell carries the configured site chrome into every public template.
+type blogShell struct {
+	*publication.Blog
+	Accent    template.CSS
+	ThemeAttr string
+}
+
+func newBlogShell(blog *publication.Blog) blogShell {
+	if blog == nil {
+		blog = publication.DefaultBlog()
+	}
+	// publication.SetBlog only accepts the fixed palette, so the value cannot
+	// break out of the custom property it is written into.
+	return blogShell{Blog: blog, Accent: template.CSS(blog.Accent), ThemeAttr: blog.Theme}
+}
+
 type publicArticle struct {
 	*publication.Article
+	blogShell
 	HTML        template.HTML
 	Excerpt     string
 	Headings    []markdown.Heading
@@ -170,6 +246,7 @@ type publicArticle struct {
 func (a *App) publicRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /{$}", a.publicIndex)
 	mux.HandleFunc("GET /posts/{id}", a.publicPost)
+	mux.HandleFunc("GET /pages/{slug}", a.publicStandalone)
 	mux.HandleFunc("GET /media/{id}/{blob}", a.publicAsset)
 	mux.HandleFunc("GET /blog.css", func(w http.ResponseWriter, r *http.Request) { a.static(w, r, "blog.css") })
 }
@@ -183,6 +260,7 @@ func (a *App) publicSnapshot() map[string]*publication.Article {
 
 func (a *App) publicIndex(w http.ResponseWriter, r *http.Request) {
 	articles := a.publicSnapshot()
+	shell := newBlogShell(a.publications.Blog())
 	list := []publicArticle{}
 	for _, article := range publication.Published(articles) {
 		rendered, err := publication.Render(article, articles)
@@ -190,9 +268,12 @@ func (a *App) publicIndex(w http.ResponseWriter, r *http.Request) {
 			fail(w, 500, "文章渲染失败")
 			return
 		}
-		list = append(list, publicArticle{Article: article, Excerpt: rendered.Excerpt})
+		list = append(list, publicArticle{Article: article, blogShell: shell, Excerpt: rendered.Excerpt})
 	}
-	publicPage(w, "index", map[string]any{"Articles": list})
+	publicPage(w, "index", struct {
+		blogShell
+		Articles []publicArticle
+	}{shell, list})
 }
 
 func (a *App) publicPost(w http.ResponseWriter, r *http.Request) {
@@ -214,7 +295,7 @@ func (a *App) publicPost(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// Only safe-mode Markdown renderer output is trusted as template HTML.
-		publicPage(w, "post", publicArticle{Article: article, HTML: template.HTML(body), Excerpt: rendered.Excerpt, Headings: rendered.Headings, ShowUpdated: article.Revised, TitleID: titleID})
+		publicPage(w, "post", publicArticle{Article: article, blogShell: newBlogShell(a.publications.Blog()), HTML: template.HTML(body), Excerpt: rendered.Excerpt, Headings: rendered.Headings, ShowUpdated: article.Revised, TitleID: titleID})
 		return
 	}
 	http.NotFound(w, r)
@@ -229,6 +310,92 @@ func publicPage(w http.ResponseWriter, name string, data any) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(body.Bytes())
+}
+
+// publicStandalone renders a page that lives with the blog configuration rather
+// than in the vault. Links resolve against currently published articles only.
+// publishedNotes indexes enabled articles by vault-relative path.
+func publishedNotes(articles map[string]*publication.Article) map[string]*vault.Entry {
+	entries := make(map[string]*vault.Entry, len(articles))
+	for name, article := range articles {
+		if !article.Enabled || vault.Kind(name) != "note" {
+			continue
+		}
+		entries[name] = &vault.Entry{Name: path.Base(name), Path: name, Kind: "note"}
+	}
+	return entries
+}
+
+// resolvePublished follows the same preference order as vault.Snapshot.resolve:
+// exact path, then an implicit .md, then an unambiguous path suffix.
+func resolvePublished(entries map[string]*vault.Entry, target string) *vault.Entry {
+	if target == "" || strings.Contains(target, "\\") || strings.HasPrefix(target, "/") {
+		return nil
+	}
+	target = path.Clean(target)
+	candidates := []string{target}
+	if vault.Kind(target) != "note" {
+		candidates = append(candidates, target+".md")
+	}
+	for _, candidate := range candidates {
+		if entry := entries[candidate]; entry != nil {
+			return entry
+		}
+	}
+	var found *vault.Entry
+	for _, candidate := range candidates {
+		for name, entry := range entries {
+			if strings.HasSuffix(name, "/"+candidate) {
+				if found != nil && found.Path != entry.Path {
+					return nil // Ambiguous: report as unresolved instead of guessing.
+				}
+				found = entry
+			}
+		}
+	}
+	return found
+}
+
+func (a *App) publicStandalone(w http.ResponseWriter, r *http.Request) {
+	page := a.publications.Page(r.PathValue("slug"))
+	if page == nil {
+		http.NotFound(w, r)
+		return
+	}
+	articles := a.publicSnapshot()
+	published := publishedNotes(articles)
+	rendered, err := markdown.RenderWithOptions([]byte(page.Source), "page/"+page.Slug+".md", nil, markdown.RenderOptions{
+		Resolve: func(from, target string, wiki bool) (*vault.Entry, error) {
+			// A standalone page lives outside the vault, so a wiki link without
+			// an extension must still find the article it names.
+			if entry := resolvePublished(published, target); entry != nil {
+				return entry, nil
+			}
+			return nil, fs.ErrNotExist
+		},
+		NoteURL: func(name, fragment string) string {
+			target := articles[name]
+			if target == nil || !target.Enabled {
+				return ""
+			}
+			href := publication.URL(target.ID)
+			if fragment != "" {
+				return href + "#" + markdown.Slug(fragment)
+			}
+			return href
+		},
+		AssetURL: func(name string) string { return "" },
+	})
+	if err != nil {
+		fail(w, 500, "页面渲染失败")
+		return
+	}
+	publicPage(w, "page", struct {
+		blogShell
+		Page     *publication.BlogPage
+		HTML     template.HTML
+		Headings []markdown.Heading
+	}{newBlogShell(a.publications.Blog()), page, template.HTML(rendered.HTML), rendered.Headings})
 }
 
 func (a *App) publicAsset(w http.ResponseWriter, r *http.Request) {

@@ -29,6 +29,7 @@
   <symbol id="i-graph" viewBox="0 0 24 24"><circle cx="5" cy="6" r="3"/><circle cx="18" cy="5" r="2"/><circle cx="11" cy="18" r="3"/><circle cx="20" cy="17" r="2"/><path d="m7 8 3 7M8 6l8-1M13 16l4-9M14 18h4"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="m14 5 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14v6ZM12 20h8"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"/></symbol>
 </defs></svg>
 <div class="app-shell">
   <nav class="activity-bar" aria-label="工作区工具">
@@ -39,7 +40,7 @@
     <button class="rail-button" id="admin-button" aria-label="后台管理与 Git 同步" title="后台管理与 Git 同步"><svg><use href="#i-lock"/></svg></button>
     <div class="rail-spacer"></div>
     <button class="rail-button" id="theme-button" aria-label="切换浅色或深色主题" title="切换主题"><svg><use href="#i-sun"/></svg></button>
-    <span class="avatar" title="本地工作区">N</span>
+    <button class="avatar settings-avatar" id="panel-button" aria-label="打开设置与工具面板" aria-haspopup="dialog" title="设置与工具"><svg><use href="#i-gear"/></svg><span class="avatar-initial">N</span></button>
   </nav>
 
   <aside class="file-pane" id="file-pane" aria-label="笔记目录">
@@ -51,7 +52,6 @@
   <button class="pane-backdrop" id="pane-backdrop" aria-label="关闭目录"></button>
 
   <main class="workspace">
-    <div class="admin-strip"><button id="git-manage-button">Git 管理</button><button id="settings-button" hidden>系统设置</button><button id="publish-button" disabled>发布设置</button><a href="/" target="_blank" rel="noopener">公开首页 ↗</a><button id="end-test-button" hidden>结束测试</button></div>
     <div class="tab-bar"><button class="icon-button pane-toggle" id="pane-toggle" aria-label="展开或收起目录" aria-expanded="true"><svg><use href="#i-panel"/></svg></button><div class="tabs" id="tabs" role="tablist" aria-label="打开的笔记"></div></div>
     <header class="document-toolbar"><div class="history-buttons"><button class="icon-button" id="back-button" aria-label="后退" title="后退"><svg><use href="#i-arrow"/></svg></button><button class="icon-button" id="forward-button" aria-label="前进" title="前进"><svg class="flipped"><use href="#i-arrow"/></svg></button></div><div class="breadcrumbs" id="breadcrumbs">工作区</div><button class="icon-button" id="edit-button" aria-label="编辑当前笔记" title="编辑笔记" disabled><svg><use href="#i-edit"/></svg></button><button class="icon-button" id="local-graph-button" aria-label="打开当前笔记的局部图谱" title="当前笔记的局部图谱"><svg><use href="#i-graph"/></svg></button><div class="view-switch" role="group" aria-label="阅读模式"><button class="active" id="preview-button" aria-pressed="true" title="阅读视图"><svg><use href="#i-book"/></svg><span>阅读</span></button><button id="source-button" aria-pressed="false" title="查看 Markdown 源码（只读）"><svg><use href="#i-code"/></svg><span>源码</span></button></div><button class="icon-button outline-toggle" id="outline-toggle" aria-label="展开或收起大纲" aria-expanded="true"><svg><use href="#i-panel"/></svg></button></header>
     <div class="document-layout">
@@ -112,6 +112,56 @@
   <form id="publication-date-form"><label for="publication-date">发布时间（本地时间）</label><div class="publication-date-row"><input id="publication-date" type="datetime-local" step="1" required><button type="submit" id="publication-date-save">保存时间</button></div></form>
   <p id="publication-status" role="status" aria-live="polite"></p>
   <div class="publication-bottom"><a id="publication-link" target="_blank" rel="noopener" hidden>查看文章 ↗</a><button id="publication-refresh">更新已发布文章</button></div>
+</dialog>
+<dialog class="app-dialog panel-dialog" id="panel-dialog" aria-labelledby="panel-title">
+  <div class="admin-heading"><h2 id="panel-title">设置与工具</h2><button id="panel-close">关闭</button></div>
+  <div class="panel-tools">
+    <button type="button" id="panel-git">Git 管理</button>
+    <button type="button" id="panel-publish" disabled>发布设置</button>
+    <button type="button" id="panel-settings" hidden>系统设置</button>
+    <a id="panel-home" href="/" target="_blank" rel="noopener">公开首页 ↗</a>
+    <button type="button" id="panel-end-test" hidden>结束测试</button>
+    <button type="button" id="panel-logout">退出登录</button>
+  </div>
+  <section class="panel-blog" aria-labelledby="panel-blog-title">
+    <div class="section-heading"><h3 id="panel-blog-title">博客设置</h3><span id="panel-blog-state" class="mode-badge"></span></div>
+    <form id="blog-form">
+      <div class="field-pair">
+        <div><label for="blog-title">站点标题</label><input id="blog-title" autocomplete="off" maxlength="120" required></div>
+        <div><label for="blog-author">作者（可选）</label><input id="blog-author" autocomplete="off" maxlength="120"></div>
+      </div>
+      <label for="blog-description">站点描述</label>
+      <input id="blog-description" autocomplete="off" maxlength="400">
+      <label for="blog-footer">页脚文字</label>
+      <input id="blog-footer" autocomplete="off" maxlength="400">
+      <div class="field-pair">
+        <div>
+          <label for="blog-accent">主题色</label>
+          <select id="blog-accent"></select>
+        </div>
+        <div>
+          <label for="blog-theme">配色模式</label>
+          <select id="blog-theme">
+            <option value="auto">跟随读者系统</option>
+            <option value="light">始终浅色</option>
+            <option value="dark">始终深色</option>
+          </select>
+        </div>
+      </div>
+      <div class="blog-preview" id="blog-preview" aria-live="polite">
+        <span class="blog-preview-dot"></span>
+        <span id="blog-preview-text">预览</span>
+      </div>
+      <div class="section-heading panel-pages-heading">
+        <h4>独立页面</h4>
+        <button type="button" id="blog-add-page">新增页面</button>
+      </div>
+      <p class="field-note">独立页面保存在发布数据目录，不写入笔记库；地址为 <code>/pages/短地址</code>。最多 12 个。</p>
+      <div id="blog-pages" class="blog-pages"></div>
+      <p id="blog-error" class="panel-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="submit" class="save-button" id="blog-save">保存博客设置</button></div>
+    </form>
+  </section>
 </dialog>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </body>

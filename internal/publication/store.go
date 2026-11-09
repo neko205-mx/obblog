@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -36,16 +37,41 @@ type Article struct {
 	Assets      map[string]string       `json:"assets"`
 }
 
+// Blog is the site-level presentation of the public index. It is stored beside
+// the publication records so a blog stays configured for one vault.
+type Blog struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Author      string `json:"author"`
+	// Accent is a lowercase #rrggbb color chosen from a fixed palette.
+	Accent string `json:"accent"`
+	// Theme is "light", "dark" or "auto" (follow the reader's preference).
+	Theme  string      `json:"theme"`
+	Footer string      `json:"footer"`
+	Pages  []*BlogPage `json:"pages"`
+}
+
+// BlogPage is a standalone Markdown page that is rendered at /pages/<slug>.
+type BlogPage struct {
+	Slug      string    `json:"slug"`
+	Title     string    `json:"title"`
+	Source    string    `json:"source"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
 type diskState struct {
 	Version  int                 `json:"version"`
 	GitHead  string              `json:"gitHead,omitempty"`
 	Articles map[string]*Article `json:"articles"`
+	Blog     *Blog               `json:"blog,omitempty"`
 }
 
 type Store struct {
 	mu       sync.RWMutex
 	dir      string
 	articles map[string]*Article
+	blog     *Blog
 	gitHead  string
 }
 
@@ -88,7 +114,7 @@ func Open(data, source string) (*Store, error) {
 		return nil, errors.New("发布数据目录不能位于笔记库内，请调整 -data")
 	}
 	hash := sha256.Sum256([]byte(source))
-	s := &Store{dir: filepath.Join(abs, "publications", hex.EncodeToString(hash[:16])), articles: map[string]*Article{}}
+	s := &Store{dir: filepath.Join(abs, "publications", hex.EncodeToString(hash[:16])), articles: map[string]*Article{}, blog: DefaultBlog()}
 	b, err := os.ReadFile(filepath.Join(s.dir, "publications.json"))
 	if errors.Is(err, fs.ErrNotExist) {
 		return s, nil
@@ -108,6 +134,16 @@ func Open(data, source string) (*Store, error) {
 			return nil, errors.New("无效的发布同步版本")
 		}
 	}
+	blog := state.Blog
+	if blog == nil {
+		blog = DefaultBlog()
+	} else {
+		cleaned, err := normalizeBlog(*blog)
+		if err != nil {
+			return nil, err
+		}
+		blog = cleaned
+	}
 	ids := map[string]bool{}
 	for name, article := range state.Articles {
 		if article == nil || article.Path != name || !vault.ValidPath(name) || vault.Kind(name) != "note" || !validID(article.ID) || ids[article.ID] || article.PublishedAt.IsZero() || article.UpdatedAt.IsZero() || len(article.Source) > vault.MaxNoteSize {
@@ -126,6 +162,7 @@ func Open(data, source string) (*Store, error) {
 		}
 	}
 	s.articles = state.Articles
+	s.blog = blog
 	s.gitHead = state.GitHead
 	return s, nil
 }
@@ -264,7 +301,7 @@ func (s *Store) Set(v *vault.Vault, name string, enabled bool, date *time.Time, 
 	if s.gitHead != "" {
 		head = s.gitHead
 	}
-	if err := s.persist(next, head); err != nil {
+	if err := s.persist(next, s.blog, head); err != nil {
 		return nil, err
 	}
 	return &article, nil
@@ -396,7 +433,7 @@ func (s *Store) Refresh(v *vault.Vault, renames map[string]string, head string) 
 		}
 		next[name] = article
 	}
-	return s.persist(next, head)
+	return s.persist(next, s.blog, head)
 }
 
 func (s *Store) Head() string {
@@ -405,7 +442,7 @@ func (s *Store) Head() string {
 	return s.gitHead
 }
 
-func (s *Store) persist(next map[string]*Article, head string) error {
+func (s *Store) persist(next map[string]*Article, blog *Blog, head string) error {
 	if err := os.MkdirAll(s.dir, 0700); err != nil {
 		return err
 	}
@@ -415,7 +452,7 @@ func (s *Store) persist(next map[string]*Article, head string) error {
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
-	if err = json.NewEncoder(f).Encode(diskState{Version: 1, Articles: next, GitHead: head}); err != nil {
+	if err = json.NewEncoder(f).Encode(diskState{Version: 1, Articles: next, Blog: blog, GitHead: head}); err != nil {
 		return err
 	}
 	if err = f.Sync(); err != nil {
@@ -428,6 +465,7 @@ func (s *Store) persist(next map[string]*Article, head string) error {
 		return err
 	}
 	s.articles = next
+	s.blog = blog
 	s.gitHead = head
 	return nil
 }
@@ -451,3 +489,148 @@ func (s *Store) OpenAsset(id, blob string) (*os.File, string, error) {
 	}
 	return nil, "", fs.ErrNotExist
 }
+
+// DefaultBlog is what a fresh installation serves before anything is configured.
+func DefaultBlog() *Blog {
+	return &Blog{Title: "OB Journal", Description: "文章与笔记", Author: "", Accent: "#406c50", Theme: "auto", Footer: "OB Journal", Pages: []*BlogPage{}}
+}
+
+// Accents is the fixed palette offered by the settings page. Arbitrary values
+// are rejected so a saved color can never break contrast or inject CSS.
+var Accents = []string{"#406c50", "#2f6f8f", "#8a5a3b", "#7a4b6d", "#3f5d7d", "#a0403f", "#5c6b2f", "#3a3a3a"}
+
+var themes = map[string]bool{"light": true, "dark": true, "auto": true}
+
+const (
+	maxBlogTitle  = 120
+	maxBlogText   = 400
+	maxBlogSlug   = 64
+	maxBlogPages  = 12
+	maxBlogSource = 2 << 20
+)
+
+// SlugPattern is shared with the web layer to validate /pages/<slug> links.
+var SlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+
+func trimLimit(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if len(value) > limit {
+		value = strings.TrimSpace(value[:limit])
+	}
+	return value
+}
+
+func normalizeBlog(b Blog) (*Blog, error) {
+	b.Title = trimLimit(b.Title, maxBlogTitle)
+	if b.Title == "" {
+		return nil, errors.New("博客标题不能为空")
+	}
+	b.Description = trimLimit(b.Description, maxBlogText)
+	b.Author = trimLimit(b.Author, maxBlogTitle)
+	b.Footer = trimLimit(b.Footer, maxBlogText)
+	b.Accent = strings.ToLower(strings.TrimSpace(b.Accent))
+	if b.Accent == "" {
+		b.Accent = Accents[0]
+	}
+	valid := false
+	for _, accent := range Accents {
+		if accent == b.Accent {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		return nil, errors.New("无效的博客主题色")
+	}
+	b.Theme = strings.ToLower(strings.TrimSpace(b.Theme))
+	if b.Theme == "" {
+		b.Theme = "auto"
+	}
+	if !themes[b.Theme] {
+		return nil, errors.New("无效的博客配色模式")
+	}
+	if b.Pages == nil {
+		b.Pages = []*BlogPage{}
+	}
+	if len(b.Pages) > maxBlogPages {
+		return nil, errors.New("独立页面数量超出限制")
+	}
+	seen := map[string]bool{}
+	for _, page := range b.Pages {
+		if page == nil {
+			return nil, errors.New("无效的独立页面")
+		}
+		page.Slug = strings.ToLower(strings.TrimSpace(page.Slug))
+		if len(page.Slug) > maxBlogSlug || !SlugPattern.MatchString(page.Slug) || seen[page.Slug] {
+			return nil, errors.New("独立页面的短地址必须是小写字母、数字和连字符，且不能重复")
+		}
+		seen[page.Slug] = true
+		page.Title = trimLimit(page.Title, maxBlogTitle)
+		if page.Title == "" {
+			return nil, errors.New("独立页面标题不能为空")
+		}
+		if len(page.Source) > maxBlogSource {
+			return nil, errors.New("独立页面内容超过 2 MiB")
+		}
+		if page.CreatedAt.IsZero() {
+			page.CreatedAt = time.Now().UTC()
+		}
+		if page.UpdatedAt.IsZero() {
+			page.UpdatedAt = page.CreatedAt
+		}
+	}
+	return &b, nil
+}
+
+func cloneBlog(b *Blog) *Blog {
+	if b == nil {
+		return nil
+	}
+	out := *b
+	out.Pages = make([]*BlogPage, 0, len(b.Pages))
+	for _, page := range b.Pages {
+		if page == nil {
+			continue
+		}
+		copied := *page
+		out.Pages = append(out.Pages, &copied)
+	}
+	return &out
+}
+
+// Blog returns the current site configuration for the public templates.
+func (s *Store) Blog() *Blog {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return cloneBlog(s.blog)
+}
+
+// SetBlog replaces the site configuration. The pages list is authoritative: a
+// page omitted from the request is removed.
+func (s *Store) SetBlog(b Blog) (*Blog, error) {
+	cleaned, err := normalizeBlog(b)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.persist(s.articles, cleaned, s.gitHead); err != nil {
+		return nil, err
+	}
+	return cloneBlog(cleaned), nil
+}
+
+// Page finds one standalone page by slug.
+func (s *Store) Page(slug string) *BlogPage {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, page := range s.blog.Pages {
+		if page.Slug == slug {
+			copied := *page
+			return &copied
+		}
+	}
+	return nil
+}
+
+func PageURL(slug string) string { return "/pages/" + slug }

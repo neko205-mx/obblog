@@ -420,6 +420,43 @@ kbd { white-space: nowrap; font: 9px var(--mono); color: var(--faint); border: 1
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; transition: none !important; } }
 /* Private administration uses the same workbench palette as the reader. */
-.admin-strip{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:8px 20px;border-bottom:1px solid var(--border);font-size:11px;color:var(--muted)}
-.admin-strip button{background:none;border:0;color:inherit;font:inherit;cursor:pointer}.admin-strip a{margin-left:auto}.admin-strip a,.admin-bottom a{color:inherit;text-underline-offset:4px}.git-card p:empty{display:none}
-.admin-dialog{width:min(660px,calc(100vw - 32px));max-height:90dvh;overflow:auto}.admin-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}.admin-heading h2{margin:16px 0}.admin-heading button,.git-actions button,.admin-bottom button{background:transparent;color:inherit;border:1px solid var(--border);border-radius:5px;padding:9px 12px;cursor:pointer;font:inherit;font-size:12px}.admin-stats{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin:22px 0;color:var(--muted)}.git-card{padding:22px;border:1px solid var(--border);border-radius:8px}.git-card h3{font-weight:500;margin:14px 0}.git-card dl{display:grid;grid-template-columns:85px 1fr;gap:10px;font-size:12px}.git-card dt{color:var(--muted)}.git-card dd{margin:0;font-family:monospace;overflow-wrap:anywhere}.git-actions{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}.git-actions button:disabled{opacity:.4;cursor:default}.git-card small{font-size:11px;line-height:1.8;color:var(--muted)}.admin-bottom{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-top:22px;font-size:12px}@media(max-width:760px){.admin-strip{gap:9px;padding:8px 12px}.admin-strip>span{font-size:9px}.admin-dialog{padding:22px}.git-card{padding:16px}}
+.admin-dialog{width:min(660px,calc(100vw - 32px));max-height:90dvh;overflow:auto}.admin-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}.admin-heading h2{margin:16px 0}.admin-heading button,.git-actions button,.admin-bottom button{background:transparent;color:inherit;border:1px solid var(--border);border-radius:5px;padding:9px 12px;cursor:pointer;font:inherit;font-size:12px}.admin-stats{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin:22px 0;color:var(--muted)}.git-card{padding:22px;border:1px solid var(--border);border-radius:8px}.git-card h3{font-weight:500;margin:14px 0}.git-card dl{display:grid;grid-template-columns:85px 1fr;gap:10px;font-size:12px}.git-card dt{color:var(--muted)}.git-card dd{margin:0;font-family:monospace;overflow-wrap:anywhere}.git-actions{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}.git-actions button:disabled{opacity:.4;cursor:default}.git-card small{font-size:11px;line-height:1.8;color:var(--muted)}.admin-bottom{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-top:22px;font-size:12px}@media(max-width:760px){.admin-dialog{padding:22px}.git-card{padding:16px}}
+
+/* --- Settings & tools panel ------------------------------------------------ */
+.settings-avatar { position: relative; width: 34px; height: 34px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--accent-bg); color: var(--accent); display: grid; place-items: center; }
+.settings-avatar:hover { border-color: var(--accent); }
+.settings-avatar svg { width: 17px; height: 17px; stroke-width: 1.5; }
+.settings-avatar .avatar-initial { position: absolute; right: -2px; bottom: -2px; display: grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--rail); color: var(--muted); border: 1px solid var(--border); font: 8px/1 var(--mono); }
+.panel-dialog { width: min(720px, calc(100vw - 32px)); max-height: 88dvh; overflow: auto; }
+.panel-tools { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 26px; }
+.panel-tools button, .panel-tools a { background: transparent; border: 1px solid var(--border); border-radius: 5px; color: inherit; padding: 9px 13px; font: inherit; font-size: 12px; text-decoration: none; }
+.panel-tools button:hover, .panel-tools a:hover { border-color: var(--accent); color: var(--heading); }
+.panel-tools #panel-home { margin-left: auto; }
+.panel-blog { border-top: 1px solid var(--border); padding-top: 22px; }
+.panel-blog .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.panel-blog h3 { margin: 0; font: 18px/1.6 var(--serif); color: var(--heading); }
+.panel-blog label { display: block; font-size: 10px; margin: 16px 0 7px; color: var(--muted); }
+.panel-blog .field-pair label:first-child { margin-top: 16px; }
+.panel-blog input, .panel-blog select, .panel-blog textarea { width: 100%; border: 1px solid var(--border); background: var(--bg); color: var(--heading); padding: 9px 11px; border-radius: 5px; font: 12px var(--sans); }
+.panel-blog textarea { font-family: var(--mono); line-height: 1.7; resize: vertical; }
+.panel-blog select option { background: var(--sidebar); }
+.blog-preview { display: flex; align-items: center; gap: 9px; margin-top: 18px; padding: 11px 13px; border: 1px solid var(--border); border-left: 3px solid var(--preview-accent, var(--accent)); border-radius: 5px; background: var(--raised); font-size: 12px; color: var(--heading); }
+.blog-preview-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--preview-accent, var(--accent)); flex-shrink: 0; }
+.panel-pages-heading { margin: 26px 0 6px; }
+.panel-pages-heading h4 { margin: 0; font-size: 13px; font-weight: 550; color: var(--heading); }
+.panel-pages-heading button { background: transparent; border: 1px solid var(--border); border-radius: 5px; color: inherit; padding: 7px 11px; font: inherit; font-size: 11px; }
+.panel-blog .field-note { margin: 0 0 14px; }
+.panel-blog code { font-family: var(--mono); font-size: 11px; background: var(--raised); padding: 1px 4px; border-radius: 3px; }
+.blog-pages { display: grid; gap: 12px; }
+.blog-page { border: 1px solid var(--border); border-radius: 6px; padding: 12px; background: var(--surface); }
+.blog-page-head { display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.blog-page-head label { margin: 0; }
+.blog-page-slug span { display: block; font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+.blog-page-head input { margin: 0; }
+.blog-page-remove { background: transparent; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); padding: 8px 10px; font: inherit; font-size: 11px; }
+.blog-page-remove:hover { border-color: #a0403f; color: #c9574f; }
+.blog-page-source { margin-top: 10px; }
+.panel-error { margin: 14px 0 0; color: #c9574f; font-size: 11px; }
+.panel-blog .dialog-actions { margin-top: 20px; }
+.panel-blog .save-button { background: var(--accent-bg); border: 1px solid var(--accent); color: var(--accent); border-radius: 5px; padding: 10px 18px; font: inherit; font-size: 12px; }
+@media (max-width: 560px) { .blog-page-head { grid-template-columns: minmax(0, 1fr) auto; } .blog-page-slug { grid-column: 1; } .panel-tools #panel-home { margin-left: 0; } }

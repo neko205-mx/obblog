@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow">
+  <title>系统设置 · OB Vault</title>
+  <link rel="stylesheet" href="/admin/entry.css"><link rel="stylesheet" href="/admin/settings.css">
+  <script type="module" src="/admin/settings.js"></script>
+</head>
+<body class="settings-page">
+  <div class="settings-shell">
+    <aside class="settings-sidebar">
+      <a class="settings-brand" href="/admin/">OB / VAULT</a>
+      <nav class="settings-nav" aria-label="设置分区"><a href="#knowledge">知识库</a><a href="#credentials">GitHub 凭据</a><a href="#password">密码</a></nav>
+      <div class="settings-sidebar-bottom"><a href="/admin/">返回后台</a><button id="end-test-button" hidden>结束测试</button></div>
+    </aside>
+    <main class="settings-main">
+      <header class="settings-header"><div><h1>系统设置</h1><p>保存后需重新登录</p></div><button type="submit" form="settings-form" id="save-settings" disabled>保存设置</button></header>
+      <p id="settings-loading" role="status">加载中…</p>
+      <p id="settings-error" role="alert" hidden></p>
+      <form id="settings-form" hidden>
+        <section class="settings-section" id="knowledge" aria-labelledby="knowledge-title">
+          <div class="section-heading"><h2 id="knowledge-title">知识库</h2><span class="mode-badge" id="save-mode"></span></div>
+          <fieldset class="source-options"><legend>来源</legend><label><input type="radio" name="mode" value="existing" checked>服务器目录</label><label><input type="radio" name="mode" value="clone">克隆 GitHub 仓库</label><label><input type="radio" name="mode" value="empty">新建空知识库</label></fieldset>
+          <div id="existing-fields"><label for="vault-path">目录</label><div class="path-picker"><input id="vault-path" autocomplete="off" required><button type="button" id="browse-directory" class="secondary-button">浏览</button></div></div>
+          <div id="clone-fields" hidden><label for="repository-url">GitHub HTTPS 地址</label><input id="repository-url" type="url" placeholder="https://github.com/用户名/仓库.git" autocomplete="off" disabled><label for="repository-branch">分支（可选）</label><input id="repository-branch" placeholder="默认分支" autocomplete="off" disabled></div>
+        </section>
+        <section class="settings-section" id="credentials" aria-labelledby="credentials-title">
+          <div class="section-heading"><h2 id="credentials-title">GitHub 凭据</h2><span class="mode-badge" id="token-state"></span></div>
+          <div class="field-pair"><div><label for="git-username">用户名（可选）</label><input id="git-username" autocomplete="off"></div><div><label for="git-token">Token</label><input id="git-token" type="password" autocomplete="new-password" maxlength="4096" placeholder="公开仓库可留空"></div></div>
+          <label class="clear-token" id="clear-token-label" hidden><input id="clear-token" type="checkbox">清除已保存 Token</label>
+        </section>
+        <section class="settings-section" id="password" aria-labelledby="password-title">
+          <div class="section-heading"><h2 id="password-title">密码</h2><span class="field-note">不修改请留空</span></div>
+          <div class="field-pair"><div><label for="new-password">新密码</label><input id="new-password" type="password" autocomplete="new-password" maxlength="1024"></div><div><label for="confirm-password">确认新密码</label><input id="confirm-password" type="password" autocomplete="new-password" maxlength="1024"></div></div>
+          <p class="field-note">12 至 1024 字节</p>
+        </section>
+      </form>
+    </main>
+  </div>
+  <dialog id="directory-dialog" class="directory-dialog" aria-labelledby="directory-title"><div class="directory-heading"><h2 id="directory-title">选择目录</h2><button type="button" id="directory-close" class="secondary-button">关闭</button></div><form id="directory-form"><label for="directory-location">路径</label><div class="path-picker"><input id="directory-location" autocomplete="off"><button class="secondary-button">打开</button></div></form><div class="directory-toolbar"><button type="button" id="directory-parent" class="secondary-button">上级目录</button><button type="button" id="directory-select">使用此目录</button></div><div id="directory-list" class="directory-list"></div><p id="directory-error" role="status"></p></dialog>
+</body>
+</html>

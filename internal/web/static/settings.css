@@ -1,0 +1,63 @@
+body.settings-page { display: block; font-family: "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+.settings-shell { width: min(1200px, 100%); margin: 0 auto; display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100dvh; border-inline: 1px solid #a2c8b210; }
+.settings-sidebar { position: sticky; top: 0; height: 100dvh; padding: 46px 30px; display: flex; flex-direction: column; border-right: 1px solid #a2c8b21a; background: linear-gradient(160deg, #314c3420, transparent 70%); }
+.settings-brand { font: 17px Georgia, serif; letter-spacing: 2px; text-decoration: none; white-space: nowrap; }
+.settings-nav { display: grid; gap: 6px; margin-top: 65px; }
+.settings-nav a { text-decoration: none; padding: 12px 14px; border-left: 2px solid transparent; color: var(--muted); font-size: 13px; }
+.settings-nav a:hover, .settings-nav a[aria-current] { border-color: var(--accent); background: #a2c8b209; color: var(--ink); }
+.settings-sidebar-bottom { margin-top: auto; display: grid; gap: 22px; padding-top: 36px; }
+.settings-sidebar-bottom a { text-decoration: none; font-size: 12px; }
+.settings-sidebar-bottom button { justify-self: start; background: transparent; color: var(--muted); border: 1px solid #506155; padding: 9px 14px; font-size: 12px; }
+.settings-main { min-width: 0; padding: 0 54px 60px; }
+.settings-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 32px 0 24px; background: #171c1af5; border-bottom: 1px solid #a2c8b21a; }
+.settings-header h1 { margin: 0; font: 500 30px/1.5 "Noto Serif CJK SC", "Songti SC", Georgia, serif; letter-spacing: -1px; }
+.settings-header p { margin: 5px 0 0; font-size: 11px; }
+.settings-header button { flex-shrink: 0; font-size: 12px; padding: 12px 20px; }
+#settings-form { display: block; margin: 0; }
+.settings-section { padding: 34px 0 38px; border-bottom: 1px solid #a2c8b21a; scroll-margin-top: 135px; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 21px; }
+.section-heading h2 { font-size: 19px; font-weight: 500; margin: 0; }
+.mode-badge { color: var(--accent); background: #a2c8b20b; border: 1px solid #a2c8b225; border-radius: 4px; padding: 3px 9px; font-size: 10px; }
+.settings-page label { display: block; font-size: 12px; margin: 20px 0 9px; }
+.settings-page input { padding: 12px; font-size: 13px; min-width: 0; }
+.source-options { padding: 0; margin: 0 0 22px; border: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.source-options legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.source-options label { display: flex; align-items: center; gap: 7px; margin: 0; padding: 10px 12px; border: 1px solid #46594a; border-radius: 5px; font-size: 11px; cursor: pointer; }
+.source-options label:has(input:checked) { border-color: var(--accent); background: #a2c8b20a; color: var(--ink); }
+.settings-page input[type=radio], .settings-page input[type=checkbox] { width: auto; padding: 0; accent-color: var(--accent); margin: 0; }
+.path-picker { display: flex; gap: 10px; }
+.path-picker input { flex: 1; }
+.path-picker button { flex-shrink: 0; font-size: 12px; }
+.secondary-button { color: var(--ink); background: transparent; border: 1px solid #506155; padding: 10px 15px; font-size: 12px; }
+.field-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.field-pair label { margin-top: 0; }
+.field-note { color: var(--muted); font-size: 11px; }
+.settings-page .clear-token { display: flex; align-items: center; gap: 9px; font-size: 11px; margin-top: 17px; }
+#settings-error { padding: 13px 16px; color: #e5aaa1; background: #59362d28; border-left: 2px solid #c49284; font-size: 12px; overflow-wrap: anywhere; }
+.directory-dialog { color: var(--ink); background: var(--bg); border: 1px solid #506155; border-radius: 8px; width: min(600px, 100vw - 32px); max-height: 85dvh; padding: 24px; }
+.directory-dialog::backdrop { background: #0009; backdrop-filter: blur(4px); }
+.directory-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.directory-heading h2 { font-size: 19px; font-weight: 500; margin: 0; }
+.directory-dialog form { display: block; margin: 20px 0; }
+.directory-toolbar { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
+.directory-toolbar button { font-size: 12px; padding: 10px 14px; }
+.directory-list { max-height: 30dvh; overflow: auto; display: grid; gap: 4px; }
+.directory-list button { text-align: left; padding: 10px 12px; background: #26372b; color: var(--ink); font-size: 12px; overflow-wrap: anywhere; }
+#directory-error { color: #e5aaa1; font-size: 12px; }
+[hidden] { display: none !important; }
+@media (max-width: 760px) {
+  .settings-shell { grid-template-columns: minmax(0, 1fr); }
+  .settings-sidebar { position: static; height: auto; padding: 22px 24px 0; border-right: 0; border-bottom: 1px solid #a2c8b21a; display: grid; grid-template-columns: 1fr auto; gap: 20px; }
+  .settings-brand { font-size: 15px; align-self: center; }
+  .settings-nav { grid-row: 2; grid-column: 1/-1; display: flex; margin: 0; gap: 12px; }
+  .settings-nav a { border-left: 0; border-bottom: 2px solid transparent; padding: 12px 0; font-size: 12px; }
+  .settings-sidebar-bottom { margin: 0; padding: 0; display: flex; align-items: center; gap: 15px; }
+  .settings-sidebar-bottom button { font-size: 10px; padding: 7px 9px; }
+  .settings-sidebar-bottom a { font-size: 11px; }
+  .settings-main { padding: 0 24px 40px; }
+  .settings-header { padding: 23px 0 20px; }
+  .settings-header h1 { font-size: 25px; }
+  .settings-header button { padding: 11px 14px; }
+  .settings-section { padding: 28px 0; scroll-margin-top: 110px; }
+}
+@media (max-width: 480px) { .field-pair { grid-template-columns: minmax(0, 1fr); gap: 18px; } .source-options { gap: 7px; } .source-options label { padding: 9px; } .settings-nav { gap: 20px; } .settings-sidebar-bottom { gap: 10px; } }

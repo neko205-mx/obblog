@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 240" fill="none">
+  <rect width="720" height="240" rx="12" fill="#202a26"/>
+  <path d="M0 200H720M0 160H720M0 120H720M0 80H720M0 40H720M40 0V240M80 0V240M120 0V240M160 0V240M200 0V240M240 0V240M280 0V240M320 0V240M360 0V240M400 0V240M440 0V240M480 0V240M520 0V240M560 0V240M600 0V240M640 0V240M680 0V240" stroke="#344339" stroke-opacity=".4"/>
+  <path d="M175 120H315M405 120H545" stroke="#8cbfa9" stroke-opacity=".5" stroke-dasharray="4 5"/>
+  <rect x="65" y="80" width="120" height="80" rx="8" fill="#2a3b32" stroke="#527361"/>
+  <rect x="300" y="70" width="120" height="100" rx="8" fill="#344c3f" stroke="#8cbfa9"/>
+  <rect x="535" y="80" width="120" height="80" rx="8" fill="#2a3b32" stroke="#527361"/>
+  <path d="M112 103h17l8 8v26h-25v-34Zm17 0v9h8M118 120h13M118 126h10M350 91l-10 10 10 10M370 91l10 10-10 10M363 88l-6 26M582 103h26v31h-26zM588 111h14M588 118h14M588 125h9" stroke="#b4d5c0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#b4d5c0" font-family="monospace" font-size="10" text-anchor="middle" letter-spacing="2"><text x="125" y="187">MARKDOWN</text><text x="360" y="143">GO READER</text><text x="595" y="187">YOUR BROWSER</text></g>
+</svg>

@@ -1,0 +1,11 @@
+{{define "header"}}
+<header class="site-header"><a class="site-mark" href="/" aria-label="博客首页">OB<span class="mark-dot"></span></a><nav><a href="/">文章</a><a href="/admin/">后台</a></nav></header>
+{{end}}
+{{define "footer"}}<footer class="site-footer"><a href="/">OB Journal</a><a href="#top">回到顶部 ↑</a></footer>{{end}}
+{{define "index"}}<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>博客 · OB Journal</title><meta name="description" content="文章与笔记"><link rel="stylesheet" href="/blog.css"></head>
+<body id="top">{{template "header"}}<main class="index-main"><section class="index-heading"><h1>博客<span class="title-period">.</span></h1><span class="article-count">{{len .Articles}} 篇文章</span></section>
+<div class="article-list">{{range .Articles}}<article class="article-row"><time datetime="{{isoDate .PublishedAt}}">{{date .PublishedAt}}</time><div><h2><a href="{{postURL .ID}}">{{.Title}}</a></h2><p>{{.Excerpt}}</p></div><a class="article-arrow" href="{{postURL .ID}}" aria-label="阅读：{{.Title}}">↗</a></article>{{else}}<p class="empty-message">暂无文章</p>{{end}}</div></main>{{template "footer"}}</body></html>{{end}}
+{{define "post"}}<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{.Title}} · OB Journal</title><meta name="description" content="{{.Excerpt}}"><link rel="stylesheet" href="/blog.css"></head>
+<body id="top">{{template "header"}}<main class="post-main"><a class="back-link" href="/">← 所有文章</a><header class="post-heading" id="{{.TitleID}}"><h1>{{.Title}}</h1><div class="post-dates"><span>发布于 <time datetime="{{isoDate .PublishedAt}}">{{date .PublishedAt}}</time></span>{{if .ShowUpdated}}<span>更新于 <time datetime="{{isoDate .UpdatedAt}}">{{date .UpdatedAt}}</time></span>{{end}}</div></header><div class="post-layout"><article class="article-body">{{.HTML}}</article>{{if .Headings}}<aside class="post-outline"><details open><summary>目录</summary><nav>{{range .Headings}}<a class="level-{{.Level}}" href="#{{.ID}}">{{.Text}}</a>{{end}}</nav></details></aside>{{end}}</div></main>{{template "footer"}}</body></html>{{end}}

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>OB Vault · 知识库</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath fill='%238cbfa9' d='M20 2 35 12 30 32 17 38 5 24 9 9Z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/admin/style.css">
+  <script src="/admin/app.js" type="module"></script>
+</head>
+<body>
+<svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 8a8 8 0 1 0 0 8M20 3v5h-5"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 5c-3-2-6-2-10-1v15c4-1 7-1 10 1 3-2 6-2 10-1V4c-4-1-7-1-10 1v15"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m7 6-6 6 6 6M17 6l6 6-6 6M14 3l-4 18"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1"/><path d="m21 15-5-5L5 21"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  <symbol id="i-graph" viewBox="0 0 24 24"><circle cx="5" cy="6" r="3"/><circle cx="18" cy="5" r="2"/><circle cx="11" cy="18" r="3"/><circle cx="20" cy="17" r="2"/><path d="m7 8 3 7M8 6l8-1M13 16l4-9M14 18h4"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="m14 5 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14v6ZM12 20h8"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+</defs></svg>
+<div class="app-shell">
+  <nav class="activity-bar" aria-label="工作区工具">
+    <a class="brand" href="/admin/" aria-label="OB Vault 首页"><svg viewBox="0 0 32 38" aria-hidden="true"><path d="M16 2 29 11 25 29 14 36 3 23 7 9Z"/><path d="m16 2-2 34M7 9l18 20M3 23l26-12"/></svg></a>
+    <button class="rail-button selected" id="files-button" aria-label="文件浏览器" title="文件浏览器"><svg><use href="#i-folder"/></svg></button>
+    <button class="rail-button" id="search-button" aria-label="搜索文件（Ctrl+K）" title="搜索文件 · Ctrl+K"><svg><use href="#i-search"/></svg></button>
+    <button class="rail-button" id="graph-button" aria-label="打开关系图谱" title="关系图谱"><svg><use href="#i-graph"/></svg></button>
+    <button class="rail-button" id="admin-button" aria-label="后台管理与 Git 同步" title="后台管理与 Git 同步"><svg><use href="#i-lock"/></svg></button>
+    <div class="rail-spacer"></div>
+    <button class="rail-button" id="theme-button" aria-label="切换浅色或深色主题" title="切换主题"><svg><use href="#i-sun"/></svg></button>
+    <span class="avatar" title="本地工作区">N</span>
+  </nav>
+
+  <aside class="file-pane" id="file-pane" aria-label="笔记目录">
+    <div class="vault-heading"><span class="vault-monogram">OB</span><div><strong id="vault-name">知识库</strong></div><button class="icon-button mobile-close" id="close-pane" aria-label="关闭目录"><svg><use href="#i-close"/></svg></button></div>
+    <div class="explorer-heading"><span>文件浏览器</span><div><button class="icon-button" id="new-note-button" aria-label="新建笔记" title="新建笔记" disabled><svg><use href="#i-plus"/></svg></button><button class="icon-button" id="collapse-button" aria-label="折叠所有文件夹" title="折叠所有文件夹"><svg><use href="#i-list"/></svg></button><button class="icon-button" id="refresh-button" aria-label="刷新目录" title="刷新目录"><svg><use href="#i-refresh"/></svg></button></div></div>
+    <label class="search-field"><svg><use href="#i-search"/></svg><input id="file-search" type="search" placeholder="搜索笔记…" autocomplete="off" aria-label="按文件名或路径搜索"><kbd>⌘ K</kbd></label>
+    <div class="tree-scroll" id="file-tree" aria-label="文件列表"></div>
+  </aside>
+  <button class="pane-backdrop" id="pane-backdrop" aria-label="关闭目录"></button>
+
+  <main class="workspace">
+    <div class="admin-strip"><button id="git-manage-button">Git 管理</button><button id="settings-button" hidden>系统设置</button><button id="publish-button" disabled>发布设置</button><a href="/" target="_blank" rel="noopener">公开首页 ↗</a><button id="end-test-button" hidden>结束测试</button></div>
+    <div class="tab-bar"><button class="icon-button pane-toggle" id="pane-toggle" aria-label="展开或收起目录" aria-expanded="true"><svg><use href="#i-panel"/></svg></button><div class="tabs" id="tabs" role="tablist" aria-label="打开的笔记"></div></div>
+    <header class="document-toolbar"><div class="history-buttons"><button class="icon-button" id="back-button" aria-label="后退" title="后退"><svg><use href="#i-arrow"/></svg></button><button class="icon-button" id="forward-button" aria-label="前进" title="前进"><svg class="flipped"><use href="#i-arrow"/></svg></button></div><div class="breadcrumbs" id="breadcrumbs">工作区</div><button class="icon-button" id="edit-button" aria-label="编辑当前笔记" title="编辑笔记" disabled><svg><use href="#i-edit"/></svg></button><button class="icon-button" id="local-graph-button" aria-label="打开当前笔记的局部图谱" title="当前笔记的局部图谱"><svg><use href="#i-graph"/></svg></button><div class="view-switch" role="group" aria-label="阅读模式"><button class="active" id="preview-button" aria-pressed="true" title="阅读视图"><svg><use href="#i-book"/></svg><span>阅读</span></button><button id="source-button" aria-pressed="false" title="查看 Markdown 源码（只读）"><svg><use href="#i-code"/></svg><span>源码</span></button></div><button class="icon-button outline-toggle" id="outline-toggle" aria-label="展开或收起大纲" aria-expanded="true"><svg><use href="#i-panel"/></svg></button></header>
+    <div class="document-layout">
+      <div class="document-scroll" id="document-scroll" tabindex="0" aria-label="笔记阅读区">
+        <div class="document-container" id="document-container"><div class="empty-state"><p>加载中…</p></div></div>
+      </div>
+      <aside class="outline-pane" id="outline-pane" aria-label="当前笔记大纲"><div class="outline-heading"><svg><use href="#i-list"/></svg><span>文章大纲</span></div><nav id="outline" aria-label="文章章节"></nav><div class="note-info" id="note-info"></div></aside>
+    </div>
+    <section class="editor-view" id="editor-view" aria-label="笔记编辑工作区" hidden>
+      <header class="editor-toolbar"><label class="editor-path-label">文件路径<input id="editor-path" aria-label="编辑文件路径" readonly></label><div class="editor-actions"><button id="editor-preview-toggle" aria-pressed="false">展开预览</button><button id="close-editor">退出编辑</button><button id="save-note" class="save-button" disabled>保存到本地</button></div></header>
+      <div class="editor-info"><span id="editor-status" role="status" aria-live="polite">未保存</span><span id="editor-character-count"></span><kbd>Ctrl / ⌘ S</kbd></div>
+      <div class="editor-conflict" id="editor-conflict" hidden><div><strong>版本冲突</strong><p>请核对服务器版本后再保存。</p></div><div><button id="copy-draft">复制草稿</button><button id="show-server-note">查看服务器版本</button></div><pre id="server-version" aria-label="服务器当前版本，只读" hidden></pre></div>
+      <div class="editor-columns">
+        <div class="editor-code-pane"><div class="editor-pane-heading"><span>源码</span><div><button id="insert-image" title="插入图片" aria-label="插入图片">图片</button><input id="image-files" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/svg+xml" multiple hidden><button data-format="bold" title="加粗（Ctrl+B）" aria-label="插入加粗">B</button><button data-format="wiki" aria-label="插入双链">[[ ]]</button><button data-format="list" aria-label="插入列表">≡</button></div></div><div class="editor-input-wrap"><pre id="editor-lines" aria-hidden="true">1</pre><textarea id="note-editor" aria-label="Markdown 编辑器" spellcheck="false" wrap="off" autocomplete="off" autocapitalize="off" aria-controls="wiki-completions"></textarea><div id="wiki-completions" class="wiki-completions" role="listbox" aria-label="双链补全建议" hidden></div></div><div class="editor-hint">拖入或粘贴图片 · 输入 [[ 连接笔记 · Tab 缩进</div></div>
+        <div class="editor-preview-pane"><div class="editor-pane-heading"><span>预览</span><small id="editor-preview-state">实时预览</small></div><article class="markdown-body" id="editor-preview" aria-label="编辑内容预览"></article></div>
+      </div>
+    </section>
+    <section class="graph-view" id="graph-view" aria-label="笔记关系图谱" hidden>
+      <header class="graph-header"><div><h1>关系图谱<span id="graph-count" aria-live="polite">读取中</span></h1><p id="graph-scope" hidden></p></div><div class="graph-scope-switch" role="group" aria-label="图谱范围"><button id="graph-global" class="active" aria-pressed="true">全库</button><button id="graph-local" aria-pressed="false">当前笔记</button></div></header>
+      <div class="graph-stage" id="graph-stage">
+        <canvas id="graph-canvas" tabindex="0" role="img" aria-label="关系图谱画布，可用方向键平移、加减键缩放、0 键适应视图；也可用设置中的节点选择器浏览笔记"></canvas>
+        <p class="graph-message" id="graph-message" role="status">正在解析笔记链接…</p>
+        <details class="graph-settings" id="graph-settings" open>
+          <summary>图谱设置</summary>
+          <div class="graph-settings-body">
+            <label class="graph-search-label" for="graph-search">筛选节点</label><input id="graph-search" type="search" placeholder="名称、path:目录、#标签" autocomplete="off">
+            <label class="graph-select-row" id="graph-depth-row" hidden>邻居深度<select id="graph-depth"><option value="1">1 层</option><option value="2">2 层</option><option value="3">3 层</option></select></label>
+            <div class="graph-settings-title">筛选</div>
+            <label class="graph-check">显示标签<input id="graph-tags" type="checkbox"></label>
+            <label class="graph-check">显示附件<input id="graph-attachments" type="checkbox"></label>
+            <label class="graph-check">显示未创建笔记<input id="graph-unresolved" type="checkbox" checked></label>
+            <label class="graph-check">显示孤立笔记<input id="graph-orphans" type="checkbox" checked></label>
+            <div class="graph-settings-title">显示与布局</div>
+            <label class="graph-check">显示方向箭头<input id="graph-arrows" type="checkbox"></label>
+            <label class="graph-check">按一级目录着色<input id="graph-folders" type="checkbox" checked></label>
+            <label class="graph-range">节点大小<output id="graph-size-value">1</output><input id="graph-size" type="range" min="0.6" max="2" step="0.1" value="1"></label>
+            <label class="graph-range">连线距离<output id="graph-distance-value">100</output><input id="graph-distance" type="range" min="40" max="250" step="5" value="100"></label>
+            <label class="graph-range">排斥力度<output id="graph-repel-value">140</output><input id="graph-repel" type="range" min="20" max="400" step="10" value="140"></label>
+            <label class="graph-search-label" for="graph-picker">浏览节点（支持键盘）</label><select id="graph-picker"><option value="">选择节点</option></select>
+            <button class="graph-refresh" id="graph-refresh"><svg><use href="#i-refresh"/></svg>重新索引</button>
+            <details class="graph-warning-details" id="graph-warning-details" hidden><summary id="graph-warning-count">索引提示</summary><ul id="graph-warnings"></ul></details>
+          </div>
+        </details>
+        <div class="graph-selection" id="graph-selection" hidden><strong id="graph-selection-label"></strong><span id="graph-selection-path"></span><small id="graph-selection-stats"></small><button id="graph-open">打开笔记 ↗</button></div>
+        <div class="graph-bottom"><div class="graph-caption"><div class="graph-legend"><span><i class="legend-note"></i>笔记</span><span><i class="legend-missing"></i>未创建</span><span><i class="legend-tag"></i>标签</span><span><i class="legend-asset"></i>附件</span></div><span id="graph-hover">拖动空白处平移 · 滚轮缩放 · 点击节点阅读</span></div><div class="graph-zoom"><button id="graph-zoom-out" aria-label="缩小图谱">−</button><span id="graph-zoom-value">100%</span><button id="graph-zoom-in" aria-label="放大图谱">+</button><button id="graph-fit" aria-label="图谱适应视图" title="适应视图（0）"><svg><use href="#i-panel"/></svg></button></div></div>
+      </div>
+    </section>
+  </main>
+  <footer class="status-bar"><span><span class="status-dot"></span><span id="vault-count">读取中</span></span><span id="note-status">Markdown · UTF-8</span><span class="status-right"><svg><use href="#i-lock"/></svg><span id="access-mode">只读</span></span></footer>
+</div>
+<dialog class="app-dialog" id="unsaved-dialog" aria-labelledby="unsaved-title"><form method="dialog"><h2 id="unsaved-title">有未保存的修改</h2><div class="dialog-actions"><button value="cancel" autofocus>继续编辑</button><button value="discard" class="discard-button">放弃修改</button><button value="save" class="save-button">保存并继续</button></div></form></dialog>
+<dialog class="app-dialog admin-dialog" id="admin-dialog" aria-labelledby="admin-title"><div class="admin-heading"><h2 id="admin-title">后台管理</h2><button id="admin-close" aria-label="关闭后台管理">关闭</button></div><div class="admin-stats"><span id="admin-notes-count">— 篇笔记</span><span id="admin-assets-count">— 个附件</span></div><section class="git-card"><h3 id="git-state">尚未检查</h3><p id="git-message" role="status" aria-live="polite"></p><dl><dt>分支</dt><dd id="git-branch">—</dd><dt>本地提交</dt><dd id="git-head">—</dd><dt>远端提交</dt><dd id="git-remote">—</dd></dl><div class="git-actions"><button id="git-check">检查远端状态</button><button id="git-pull" disabled>手动拉取更新</button><button id="git-push" disabled>推送本地提交</button></div></section><div class="admin-bottom"><a href="/admin/login" target="_blank" rel="noopener">在新标签页重新登录</a><button id="logout-button">退出登录</button></div></dialog>
+<dialog class="app-dialog" id="new-note-dialog" aria-labelledby="new-note-title"><form method="dialog" id="new-note-form"><h2 id="new-note-title">新建笔记</h2><label for="new-note-path">文件路径</label><input id="new-note-path" placeholder="目录/笔记名称.md" required maxlength="1024" autocomplete="off"><p>目标文件夹需已存在。</p><div class="dialog-actions"><button value="cancel" formnovalidate>取消</button><button value="create" class="save-button">开始编写</button></div></form></dialog>
+<dialog class="app-dialog publication-dialog" id="publication-dialog" aria-labelledby="publication-title">
+  <div class="admin-heading"><h2 id="publication-title">发布设置</h2><button id="publication-close">关闭</button></div>
+  <p id="publication-note-title" class="publication-note-title"></p>
+  <label class="publication-toggle" for="publication-enabled"><span>发布到博客</span><input id="publication-enabled" type="checkbox" role="switch"></label>
+  <form id="publication-date-form"><label for="publication-date">发布时间（本地时间）</label><div class="publication-date-row"><input id="publication-date" type="datetime-local" step="1" required><button type="submit" id="publication-date-save">保存时间</button></div></form>
+  <p id="publication-status" role="status" aria-live="polite"></p>
+  <div class="publication-bottom"><a id="publication-link" target="_blank" rel="noopener" hidden>查看文章 ↗</a><button id="publication-refresh">更新已发布文章</button></div>
+</dialog>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

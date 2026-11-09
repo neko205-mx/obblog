@@ -1,0 +1,8 @@
+/obblog
+/bin/
+*.test
+coverage.out
+/.local/
+/data/
+/.env
+/.env.*

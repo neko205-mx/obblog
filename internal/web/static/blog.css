@@ -1,60 +1,7 @@
-/* --accent arrives as an inline custom property from the saved blog
-   configuration. Every tonal color below is derived from it, so choosing a
-   different accent repaints the whole page rather than a few dots. */
-html {
-  color-scheme: light;
-  --accent: #406c50;
-  --paper: #f7f7ef;
-  --serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", Georgia, serif;
-  --sans: "LXGW WenKai", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
-  --mono: "JetBrains Mono", "Cascadia Code", monospace;
-  /* Body text, rules and surfaces are all mixed from --accent, so choosing a
-     color repaints the page rather than tinting one dot. Neutral stops keep
-     contrast predictable: ink stays dark, muted stays readable. */
-  --ink: color-mix(in srgb, var(--accent) 34%, #101312);
-  --muted: color-mix(in srgb, var(--accent) 12%, #6d7672);
-  --line: color-mix(in srgb, var(--accent) 10%, #d5d8cf);
-  --accent-ui: color-mix(in srgb, var(--accent) 82%, #101312);
-  --wash: color-mix(in srgb, var(--accent) 22%, var(--paper));
-  --tint: color-mix(in srgb, var(--accent) 13%, var(--paper));
-  --quote-line: color-mix(in srgb, var(--accent) 62%, var(--paper));
-  --quote: color-mix(in srgb, var(--accent) 13%, transparent);
-  --selection: color-mix(in srgb, var(--accent) 32%, var(--paper));
-  --rule: color-mix(in srgb, var(--accent) 26%, var(--line));
-}
-/* data-theme is set per request from the saved blog configuration. "auto" has
-   no attribute, so the reader's own preference decides. */
-html[data-theme="dark"] {
-  color-scheme: dark;
-  --paper: #14181a;
-  /* On a dark paper the accent has to be lifted toward white to stay legible. */
-  --ink: color-mix(in srgb, var(--accent) 26%, #e3e7e2);
-  --muted: color-mix(in srgb, var(--accent) 14%, #858f89);
-  --line: color-mix(in srgb, var(--accent) 12%, #2c3230);
-  --accent-ui: color-mix(in srgb, var(--accent) 48%, #e3e7e2);
-  --wash: color-mix(in srgb, var(--accent) 26%, var(--paper));
-  --tint: color-mix(in srgb, var(--accent) 16%, var(--paper));
-  --quote-line: color-mix(in srgb, var(--accent) 52%, var(--paper));
-  --quote: color-mix(in srgb, var(--accent) 15%, transparent);
-  --selection: color-mix(in srgb, var(--accent) 30%, var(--paper));
-  --rule: color-mix(in srgb, var(--accent) 32%, var(--line));
-}
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme="light"]) {
-    color-scheme: dark;
-    --paper: #14181a;
-    --ink: color-mix(in srgb, var(--accent) 26%, #e3e7e2);
-    --muted: color-mix(in srgb, var(--accent) 14%, #858f89);
-    --line: color-mix(in srgb, var(--accent) 12%, #2c3230);
-    --accent-ui: color-mix(in srgb, var(--accent) 48%, #e3e7e2);
-    --wash: color-mix(in srgb, var(--accent) 26%, var(--paper));
-    --tint: color-mix(in srgb, var(--accent) 16%, var(--paper));
-    --quote-line: color-mix(in srgb, var(--accent) 52%, var(--paper));
-    --quote: color-mix(in srgb, var(--accent) 15%, transparent);
-    --selection: color-mix(in srgb, var(--accent) 30%, var(--paper));
-    --rule: color-mix(in srgb, var(--accent) 32%, var(--line));
-  }
-}
+/* All colors come from /theme.css, generated from the saved configuration.
+   The public site therefore shares one palette with the admin workspace
+   instead of maintaining a second scheme. */
+
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; scroll-padding-top: 30px; }
 body { margin: 0; background: radial-gradient(ellipse at 90% 0, color-mix(in srgb, var(--wash) 35%, transparent), transparent 45%), var(--paper); color: var(--ink); font: 16px/1.9 var(--sans); overflow-wrap: anywhere; }

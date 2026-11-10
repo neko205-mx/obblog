@@ -130,7 +130,7 @@ func TestPublicSiteUsesBlogConfiguration(t *testing.T) {
 
 	index := editRequest(testHandler(t, a), "GET", "/", nil)
 	body := index.Body.String()
-	for _, want := range []string{"CUSTOM_BLOG_TITLE", "CUSTOM_DESCRIPTION", "CUSTOM_FOOTER", `data-theme="light"`, ":root{--accent:" + publication.Accents[1], "/pages/about"} {
+	for _, want := range []string{"CUSTOM_BLOG_TITLE", "CUSTOM_DESCRIPTION", "CUSTOM_FOOTER", `data-theme="light"`, "/theme.css", "/pages/about"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("index missing %q", want)
 		}
@@ -362,42 +362,61 @@ func TestPreferencesRequireAuthentication(t *testing.T) {
 	}
 }
 
-// TestBlogCssDerivesPaletteFromAccent guards the rule that a saved accent
-// repaints the page. A regression here is silent: the swatch changes but the
-// site keeps its old colors.
-func TestBlogCssDerivesPaletteFromAccent(t *testing.T) {
-	data, err := assets.ReadFile("static/blog.css")
-	if err != nil {
-		t.Fatal(err)
-	}
-	css := string(data)
-	// Body text, rules and surfaces must come from --accent, not fixed hexes.
-	required := []string{
-		"--ink: color-mix(in srgb, var(--accent)",
-		"--muted: color-mix(in srgb, var(--accent)",
-		"--line: color-mix(in srgb, var(--accent)",
-		"--wash: color-mix(in srgb, var(--accent)",
-		"--tint: color-mix(in srgb, var(--accent)",
-		"--quote: color-mix(in srgb, var(--accent)",
-		"--quote-line: color-mix(in srgb, var(--accent)",
-		"--rule: color-mix(in srgb, var(--accent)",
-	}
-	for _, want := range required {
-		if !strings.Contains(css, want) {
-			t.Errorf("blog.css must derive from the accent: missing %q", want)
+// TestThemeCssDerivesPaletteFromAccent guards the rule that a saved accent
+// repaints every surface. Regressions here are silent: the panel updates but
+// the pages keep their old colors.
+func TestThemeCssDerivesPaletteFromAccent(t *testing.T) {
+	for _, accent := range []string{"#2f6f8f", "#a0403f"} {
+		blog := *publication.DefaultBlog()
+		blog.Accent = accent
+		css := themeCSS(&blog)
+		// Every surface token must be mixed from the chosen accent.
+		for _, token := range []string{"--bg", "--surface", "--sidebar", "--raised", "--border", "--text", "--heading", "--muted", "--accent", "--accent-bg", "--paper", "--ink"} {
+			needle := token + ": color-mix(in srgb, " + accent
+			if !strings.Contains(css, needle) {
+				t.Errorf("accent %s: %s is not derived from the accent", accent, token)
+			}
+		}
+		// Both schemes must be present so light and dark both follow the accent.
+		if !strings.Contains(css, `html[data-theme="dark"]`) || !strings.Contains(css, "prefers-color-scheme: dark") {
+			t.Error("theme.css must define an explicit dark block and a media-query fallback")
 		}
 	}
-	// The heading shades are what makes the change obvious at a glance.
-	for _, selector := range []string{"index-heading h1", "post-heading h1", "article-body h1"} {
-		rule := css[strings.Index(css, "."+selector):]
-		rule = rule[:strings.Index(rule, "}")]
-		if !strings.Contains(rule, "var(--accent)") {
-			t.Errorf("%s should be tinted by the accent", selector)
+}
+
+// TestNoSurfaceShipsItsOwnPalette asserts the per-page stylesheets no longer
+// hardcode a color scheme; they must read the shared tokens instead.
+func TestNoSurfaceShipsItsOwnPalette(t *testing.T) {
+	for _, name := range []string{"style.css", "entry.css", "settings.css", "install.css", "blog.css"} {
+		data, err := assets.ReadFile("static/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		css := string(data)
+		if strings.Contains(css, ":root {\n  --bg:") || strings.Contains(css, "--accent: #") {
+			t.Errorf("%s still declares its own palette", name)
 		}
 	}
-	// A lone fixed green accent default must not reappear in the body rules.
-	if strings.Count(css, "#406c50") != 1 {
-		t.Errorf("accent default should appear exactly once, found %d", strings.Count(css, "#406c50"))
+}
+
+// TestEveryPageLinksTheSharedTheme makes sure the solved problem cannot come
+// back: each HTML surface must load the generated stylesheet.
+func TestEveryPageLinksTheSharedTheme(t *testing.T) {
+	pages := map[string]string{
+		"index.html":    "/theme.css",
+		"login.html":    "/theme.css",
+		"settings.html": "/theme.css",
+		"install.html":  "/install/theme.css",
+		"public.html":   "/theme.css",
+	}
+	for name, want := range pages {
+		data, err := assets.ReadFile("static/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), want) {
+			t.Errorf("%s must link %s", name, want)
+		}
 	}
 }
 

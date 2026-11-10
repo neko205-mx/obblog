@@ -592,11 +592,22 @@ $("#outline-toggle").onclick = () => {
 };
 $("#preview-button").onclick = () => { state.source = false; renderDocument(); };
 $("#source-button").onclick = () => { state.source = true; renderDocument(); };
-$("#theme-button").onclick = () => {
+// The theme belongs to the saved configuration, not to this browser, so the
+// public site and the admin workspace always agree.
+$("#theme-button").onclick = async () => {
   if (!state.vault) return;
-  const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = theme;
-  try { if (!state.vault?.testMode) localStorage.setItem("ob-vault-theme", theme); } catch { /* Storage may be disabled. */ }
+  const current = document.documentElement.dataset.theme || "auto";
+  const next = current === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try {
+    const config = await api("/admin/api/blog");
+    const saved = await api("/admin/api/blog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...config, theme: next }) });
+    if (blogConfig) renderBlog(saved);
+    toast(next === "dark" ? "已切换到深色模式" : "已切换到浅色模式");
+  } catch (error) {
+    document.documentElement.dataset.theme = current;
+    toast(error.message);
+  }
 };
 window.addEventListener("popstate", async () => {
   if (editor.active && !await leaveEditor()) { history.pushState(null, "", editor.location); return; }
@@ -620,10 +631,6 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Escape" && window.matchMedia("(max-width: 760px)").matches) setPane(false);
 });
-try {
-  const theme = localStorage.getItem("ob-vault-theme");
-  if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
-} catch { /* Keep the default theme when local storage is unavailable. */ }
 $(".search-field kbd").textContent = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ K" : "Ctrl K";
 loadVault(true);
 
@@ -787,7 +794,7 @@ function renderAccentSwatches(values, selected) {
     radio.name = "blog-accent";
     radio.value = value;
     radio.checked = value === current;
-    radio.onchange = () => { blogPreview(); };
+    radio.onchange = () => { blogPreview(); saveAppearance(); };
     label.append(radio, el("span", "accent-dot"), el("span", "accent-name", ACCENT_NAMES[value] || value));
     container.append(label);
   }
@@ -895,7 +902,7 @@ function blogPayload() {
 }
 
 $("#blog-title").oninput = $("#blog-author").oninput = blogPreview;
-for (const input of document.querySelectorAll('input[name="blog-theme"]')) input.onchange = blogPreview;
+for (const input of document.querySelectorAll('input[name="blog-theme"]')) input.onchange = () => { blogPreview(); saveAppearance(); };
 $("#blog-add-page").onclick = () => {
   if (blogPagesCount() >= MAX_PAGES) { blogError(`最多 ${MAX_PAGES} 个独立页面`); return; }
   blogError();
@@ -931,8 +938,8 @@ const panelSections = [...document.querySelectorAll("[data-panel-section]")];
 function showPanelSection(name) {
   for (const tab of panelTabs) tab.setAttribute("aria-selected", String(tab.dataset.panelTab === name));
   for (const section of panelSections) section.hidden = section.dataset.panelSection !== name;
+  if (name === "appearance" || name === "blog") loadBlog();
   if (name === "general") loadPreferences();
-  if (name === "blog") loadBlog();
 }
 for (const tab of panelTabs) tab.onclick = () => showPanelSection(tab.dataset.panelTab);
 
@@ -1028,6 +1035,38 @@ function applyPreferences(list) {
   editor.setSpellcheck(value("editor.spellcheck", false));
   editor.setDraftGuard(value("editor.autoSaveDraft", true));
   graphView.setHoverPreview(value("graph.hoverPreview", true));
+}
+
+// Appearance applies to every surface, so it saves on change rather than
+// waiting for the blog form. The stylesheet is regenerated server-side.
+let appearanceBusy = false;
+async function saveAppearance() {
+  if (appearanceBusy || !blogConfig) return;
+  appearanceBusy = true;
+  const state = $("#panel-appearance-state");
+  state.textContent = "保存中…";
+  try {
+    const saved = await api("/admin/api/blog", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...blogConfig, accent: selectedAccent(), theme: selectedTheme() }),
+    });
+    blogConfig = saved;
+    applyDocumentTheme(selectedTheme());
+    toast("外观已更新");
+    state.textContent = "全站生效";
+  } catch (error) {
+    toast(error.message);
+    state.textContent = "保存失败";
+  } finally { appearanceBusy = false; }
+}
+
+// Mirror the saved mode onto the document so the panel reflects it at once.
+function applyDocumentTheme(mode) {
+  if (mode === "auto") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = mode;
+  // Reload the generated palette so the accent applies without a full reload.
+  const link = document.querySelector('link[data-theme-sheet]');
+  if (link) { const fresh = link.cloneNode(); fresh.href = "/theme.css?t=" + Date.now(); link.replaceWith(fresh); }
 }
 
 $("#panel-button").onclick = async () => {

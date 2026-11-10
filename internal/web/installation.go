@@ -75,6 +75,7 @@ func recoveryHandler(a *App) http.Handler {
 	mux.HandleFunc("GET /admin/entry.css", func(w http.ResponseWriter, r *http.Request) { a.static(w, r, "entry.css") })
 	mux.HandleFunc("POST /admin/api/login", a.login)
 	mux.HandleFunc("POST /admin/api/logout", a.logout)
+	a.themeRoutes(mux)
 	a.publicRoutes(mux)
 	mux.HandleFunc("/admin/", func(w http.ResponseWriter, r *http.Request) {
 		if !a.authenticated(r) {
@@ -142,6 +143,21 @@ func (rt *Runtime) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		(&App{}).static(w, r, "install.html")
+		return
+	}
+	// The installer has no App yet, so the palette comes from whatever the data
+	// directory already holds, falling back to defaults.
+	if r.URL.Path == "/install/theme.css" && r.Method == "GET" {
+		rt.mu.RLock()
+		blog := publication.DefaultBlog()
+		if rt.app != nil && rt.app.publications != nil {
+			blog = rt.app.publications.Blog()
+		} else if rt.settings != nil {
+			blog = publication.DefaultBlog()
+		}
+		rt.mu.RUnlock()
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		w.Write(themeStylesheet(blog))
 		return
 	}
 	for _, asset := range []string{"install.js", "install.css", "entry.css"} {
@@ -228,9 +244,9 @@ func (rt *Runtime) settingsAPI(w http.ResponseWriter, r *http.Request) {
 	rt.mu.RUnlock()
 	switch {
 	case r.URL.Path == "/admin/settings" && r.Method == "GET":
-		(&App{}).static(w, r, "settings.html")
+		a.static(w, r, "settings.html")
 	case (r.URL.Path == "/admin/settings.js" || r.URL.Path == "/admin/settings.css") && r.Method == "GET":
-		(&App{}).static(w, r, strings.TrimPrefix(r.URL.Path, "/admin/"))
+		a.static(w, r, strings.TrimPrefix(r.URL.Path, "/admin/"))
 	case r.URL.Path == "/admin/api/settings" && r.Method == "GET":
 		_, err := exec.LookPath("git")
 		respond(w, map[string]any{"vault": c.Vault, "writable": writable, "git": gitEnabled, "tokenConfigured": c.Credentials.Token != "", "username": c.Credentials.Username, "gitAvailable": err == nil, "problem": problem, "testMode": rt.testMode})

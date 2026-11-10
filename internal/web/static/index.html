@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN" data-theme="{{THEME}}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
   <title>OB Vault · 知识库</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath fill='%238cbfa9' d='M20 2 35 12 30 32 17 38 5 24 9 9Z'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/admin/style.css">
+  <link rel="stylesheet" href="/theme.css" data-theme-sheet><link rel="stylesheet" href="/admin/style.css">
   <script src="/admin/app.js" type="module"></script>
 </head>
 <body>
@@ -117,6 +117,7 @@
   <div class="admin-heading"><h2 id="panel-title">设置与工具</h2><button id="panel-close">关闭</button></div>
   <nav class="panel-tabs" role="tablist" aria-label="设置分区">
     <button type="button" role="tab" data-panel-tab="tools" aria-selected="true">工具</button>
+    <button type="button" role="tab" data-panel-tab="appearance" aria-selected="false">外观</button>
     <button type="button" role="tab" data-panel-tab="general" aria-selected="false">常规</button>
     <button type="button" role="tab" data-panel-tab="blog" aria-selected="false">博客</button>
   </nav>
@@ -131,6 +132,27 @@
       <button type="button" id="panel-logout">退出登录</button>
     </div>
     <p class="field-note">Git 同步、发布与账号设置集中在这里，不占用编辑区。</p>
+  </section>
+
+  <section class="panel-section" data-panel-section="appearance" role="tabpanel" aria-label="外观" hidden>
+    <div class="section-heading"><h3>外观</h3><span id="panel-appearance-state" class="mode-badge">全站生效</span></div>
+    <p class="field-note">主题色与深浅模式同时作用于后台、登录页和公开博客。</p>
+      <fieldset class="accent-field">
+        <legend>主题色</legend>
+        <div id="blog-accent" class="accent-swatches" role="radiogroup" aria-label="主题色"></div>
+      </fieldset>
+      <fieldset class="theme-field">
+        <legend>配色模式</legend>
+        <div class="theme-options" role="radiogroup" aria-label="配色模式">
+          <label><input type="radio" name="blog-theme" value="auto" checked><span>跟随系统</span></label>
+          <label><input type="radio" name="blog-theme" value="light"><span>浅色</span></label>
+          <label><input type="radio" name="blog-theme" value="dark"><span>深色</span></label>
+        </div>
+      </fieldset>
+    <div class="blog-preview" id="blog-preview" aria-live="polite">
+        <span class="blog-preview-dot"></span>
+        <span id="blog-preview-text">预览</span>
+      </div>
   </section>
 
   <section class="panel-section" data-panel-section="general" role="tabpanel" aria-label="常规" hidden>
@@ -151,22 +173,6 @@
       <input id="blog-description" autocomplete="off" maxlength="400">
       <label for="blog-footer">页脚文字</label>
       <input id="blog-footer" autocomplete="off" maxlength="400">
-      <fieldset class="accent-field">
-        <legend>主题色</legend>
-        <div id="blog-accent" class="accent-swatches" role="radiogroup" aria-label="主题色"></div>
-      </fieldset>
-      <fieldset class="theme-field">
-        <legend>配色模式</legend>
-        <div class="theme-options" role="radiogroup" aria-label="配色模式">
-          <label><input type="radio" name="blog-theme" value="auto" checked><span>跟随系统</span></label>
-          <label><input type="radio" name="blog-theme" value="light"><span>浅色</span></label>
-          <label><input type="radio" name="blog-theme" value="dark"><span>深色</span></label>
-        </div>
-      </fieldset>
-      <div class="blog-preview" id="blog-preview" aria-live="polite">
-        <span class="blog-preview-dot"></span>
-        <span id="blog-preview-text">预览</span>
-      </div>
       <div class="section-heading panel-pages-heading">
         <h4>独立页面</h4>
         <button type="button" id="blog-add-page">新增页面</button>

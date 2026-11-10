@@ -279,7 +279,7 @@ var publicTemplates = template.Must(template.New("public").Funcs(template.FuncMa
 type blogShell struct {
 	*publication.Blog
 	Accent    template.CSS
-	ThemeAttr string
+	ThemeAttr template.HTMLAttr
 }
 
 func newBlogShell(blog *publication.Blog) blogShell {
@@ -288,7 +288,13 @@ func newBlogShell(blog *publication.Blog) blogShell {
 	}
 	// publication.SetBlog only accepts the fixed palette, so the value cannot
 	// break out of the custom property it is written into.
-	return blogShell{Blog: blog, Accent: template.CSS(blog.Accent), ThemeAttr: blog.Theme}
+	// "auto" leaves data-theme off so the stylesheet follows the reader's
+	// system preference; the attribute is rendered verbatim into <html ...>.
+	attr := ""
+	if blog.Theme == "light" || blog.Theme == "dark" {
+		attr = ` data-theme="` + blog.Theme + `"`
+	}
+	return blogShell{Blog: blog, Accent: template.CSS(blog.Accent), ThemeAttr: template.HTMLAttr(attr)}
 }
 
 type publicArticle struct {
@@ -299,6 +305,15 @@ type publicArticle struct {
 	Headings    []markdown.Heading
 	ShowUpdated bool
 	TitleID     string
+}
+
+// themeRoutes serves the shared palette used by every page. It is public
+// because the login and installer screens need it before a session exists.
+func (a *App) themeRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /theme.css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		w.Write(themeStylesheet(a.publications.Blog()))
+	})
 }
 
 func (a *App) publicRoutes(mux *http.ServeMux) {

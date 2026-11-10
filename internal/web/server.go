@@ -111,6 +111,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /admin/login.js", func(w http.ResponseWriter, r *http.Request) { a.static(w, r, "login.js") })
 	mux.HandleFunc("GET /admin/entry.css", func(w http.ResponseWriter, r *http.Request) { a.static(w, r, "entry.css") })
 	mux.HandleFunc("POST /admin/api/login", a.login)
+	a.themeRoutes(mux)
 	private.HandleFunc("POST /api/logout", a.logout)
 	private.HandleFunc("GET /api/git", a.gitStatus)
 	private.HandleFunc("POST /api/git/pull", a.gitPull)
@@ -141,13 +142,8 @@ func (a *App) Handler() http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		data, err := assets.ReadFile("static/" + name)
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", mime.TypeByExtension(path.Ext(name)))
-		w.Write(data)
+		// Delegate so the {{THEME}} placeholder is substituted consistently.
+		a.static(w, r, name)
 	})
 	a.publicRoutes(mux)
 	return protect(mux)
@@ -174,14 +170,40 @@ func protect(next http.Handler) http.Handler {
 	})
 }
 
+// static serves an embedded asset. HTML pages carry a {{THEME}} placeholder so
+// the saved light/dark choice applies before first paint; keeping the swap here
+// means every screen shares one injection point.
 func (a *App) static(w http.ResponseWriter, r *http.Request, name string) {
 	data, err := assets.ReadFile("static/" + name)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
+	if path.Ext(name) == ".html" {
+		// Omit the attribute entirely for "auto" so the stylesheet's
+		// prefers-color-scheme branch decides; an empty value is not valid.
+		attr := a.themeAttr()
+		replacement := ""
+		if attr != "" {
+			replacement = ` data-theme="` + attr + `"`
+		}
+		data = []byte(strings.ReplaceAll(string(data), ` data-theme="{{THEME}}"`, replacement))
+	}
 	w.Header().Set("Content-Type", mime.TypeByExtension(path.Ext(name)))
 	w.Write(data)
+}
+
+// themeAttr resolves "auto" to an empty attribute so the stylesheet's
+// prefers-color-scheme branch decides.
+func (a *App) themeAttr() string {
+	if a.publications == nil {
+		return ""
+	}
+	blog := a.publications.Blog()
+	if blog == nil || blog.Theme == "auto" || blog.Theme == "" {
+		return ""
+	}
+	return blog.Theme
 }
 
 func (a *App) gitStatus(w http.ResponseWriter, r *http.Request) {

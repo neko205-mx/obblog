@@ -1,23 +1,9 @@
+/* Colors come from /theme.css, generated from the saved configuration. Only
+   typography is declared here so one palette drives every surface. */
 :root {
-  --bg: #1c1e20;
-  --surface: #202325;
-  --sidebar: #191c1e;
-  --rail: #151819;
-  --raised: #282c2e;
-  --hover: #2c3133;
-  --border: #303537;
-  --line: #282d2f;
-  --text: #ced2d0;
-  --heading: #edf0e9;
-  --muted: #8b9591;
-  --faint: #62716a;
-  --accent: #a5ccb8;
-  --accent-bg: #293b34;
-  --code: #171a1c;
   --serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", Georgia, serif;
   --sans: "LXGW WenKai", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   --mono: "JetBrains Mono", "Cascadia Code", "Noto Sans Mono", Consolas, monospace;
-  color-scheme: dark;
 }
 
 .publication-dialog { width: min(480px, calc(100% - 32px)); }
@@ -36,24 +22,6 @@
 .publication-bottom { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 20px; font-size: 12px; }
 @media (max-width: 480px) { .publication-date-row { flex-wrap: wrap; } .publication-date-row input { flex-basis: 100%; } }
 
-:root[data-theme="light"] {
-  --bg: #faf9f5;
-  --surface: #f5f4ef;
-  --sidebar: #eeeee7;
-  --rail: #e5e7de;
-  --raised: #e9ece3;
-  --hover: #e2e7dd;
-  --border: #d9ddd1;
-  --line: #e5e7df;
-  --text: #444e46;
-  --heading: #222f28;
-  --muted: #737e72;
-  --faint: #8a9687;
-  --accent: #3d6c52;
-  --accent-bg: #dce8d9;
-  --code: #eeeee7;
-  color-scheme: light;
-}
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -436,7 +404,7 @@ kbd { white-space: nowrap; font: 9px var(--mono); color: var(--faint); border: 1
   scrollbar-color: color-mix(in srgb, var(--border) 70%, transparent) transparent;
   overscroll-behavior: contain;
 }
-:root[data-theme="light"] .panel-dialog { color-scheme: light; }
+html[data-theme="light"] .panel-dialog { color-scheme: light; }
 /* The dialog scrolls as a whole; keeping padding on the element means the
    action row never sits against the scrollbar. */
 .panel-dialog .dialog-actions { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--border); }
@@ -458,9 +426,9 @@ kbd { white-space: nowrap; font: 9px var(--mono); color: var(--faint); border: 1
    surface, fixed light uses the paper color, auto shows a split hint. */
 /* Only the shell border changes with the mode; the left accent bar keeps
    showing the chosen swatch. */
-.panel-dialog .blog-preview[data-theme="dark"] { background: #14181a; color: #d5dbd5; border-top-color: #2b3230; border-right-color: #2b3230; border-bottom-color: #2b3230; }
-.panel-dialog .blog-preview[data-theme="light"] { background: #f7f7ef; color: #263b31; border-top-color: #d7ddcf; border-right-color: #d7ddcf; border-bottom-color: #d7ddcf; }
-.panel-dialog .blog-preview[data-theme="auto"] { background: linear-gradient(100deg, #f7f7ef 0 50%, #14181a 50% 100%); }
+.panel-dialog .blog-preview[data-theme="dark"] { background: var(--rail); color: var(--text); border-top-color: var(--border); border-right-color: var(--border); border-bottom-color: var(--border); }
+.panel-dialog .blog-preview[data-theme="light"] { background: var(--bg); color: var(--text); border-top-color: var(--border); border-right-color: var(--border); border-bottom-color: var(--border); }
+.panel-dialog .blog-preview[data-theme="auto"] { background: linear-gradient(100deg, var(--bg) 0 50%, var(--rail) 50% 100%); }
 .blog-preview-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--preview-accent, var(--accent)); flex-shrink: 0; }
 .panel-pages-heading { margin: 26px 0 6px; }
 .panel-pages-heading h4 { margin: 0; font-size: 13px; font-weight: 550; color: var(--heading); }

@@ -130,7 +130,7 @@ func TestPublicSiteUsesBlogConfiguration(t *testing.T) {
 
 	index := editRequest(testHandler(t, a), "GET", "/", nil)
 	body := index.Body.String()
-	for _, want := range []string{"CUSTOM_BLOG_TITLE", "CUSTOM_DESCRIPTION", "CUSTOM_FOOTER", `data-theme="light"`, "style=\"--accent:" + publication.Accents[1], "/pages/about"} {
+	for _, want := range []string{"CUSTOM_BLOG_TITLE", "CUSTOM_DESCRIPTION", "CUSTOM_FOOTER", `data-theme="light"`, ":root{--accent:" + publication.Accents[1], "/pages/about"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("index missing %q", want)
 		}
@@ -358,6 +358,72 @@ func TestPreferencesRequireAuthentication(t *testing.T) {
 	for _, method := range []string{"GET", "POST"} {
 		if w := editRequest(handler, method, "/admin/api/preferences", map[string]any{"values": map[string]bool{}}); w.Code != 401 {
 			t.Fatalf("%s without a session: %d", method, w.Code)
+		}
+	}
+}
+
+// TestBlogCssDerivesPaletteFromAccent guards the rule that a saved accent
+// repaints the page. A regression here is silent: the swatch changes but the
+// site keeps its old colors.
+func TestBlogCssDerivesPaletteFromAccent(t *testing.T) {
+	data, err := assets.ReadFile("static/blog.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := string(data)
+	// Body text, rules and surfaces must come from --accent, not fixed hexes.
+	required := []string{
+		"--ink: color-mix(in srgb, var(--accent)",
+		"--muted: color-mix(in srgb, var(--accent)",
+		"--line: color-mix(in srgb, var(--accent)",
+		"--wash: color-mix(in srgb, var(--accent)",
+		"--tint: color-mix(in srgb, var(--accent)",
+		"--quote: color-mix(in srgb, var(--accent)",
+		"--quote-line: color-mix(in srgb, var(--accent)",
+		"--rule: color-mix(in srgb, var(--accent)",
+	}
+	for _, want := range required {
+		if !strings.Contains(css, want) {
+			t.Errorf("blog.css must derive from the accent: missing %q", want)
+		}
+	}
+	// The heading shades are what makes the change obvious at a glance.
+	for _, selector := range []string{"index-heading h1", "post-heading h1", "article-body h1"} {
+		rule := css[strings.Index(css, "."+selector):]
+		rule = rule[:strings.Index(rule, "}")]
+		if !strings.Contains(rule, "var(--accent)") {
+			t.Errorf("%s should be tinted by the accent", selector)
+		}
+	}
+	// A lone fixed green accent default must not reappear in the body rules.
+	if strings.Count(css, "#406c50") != 1 {
+		t.Errorf("accent default should appear exactly once, found %d", strings.Count(css, "#406c50"))
+	}
+}
+
+// TestBlogPanelOffersVisualPickers asserts the settings page shows colors as
+// swatches with names instead of a hex-only dropdown.
+func TestBlogPanelOffersVisualPickers(t *testing.T) {
+	html, err := assets.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	if strings.Contains(page, `<select id="blog-accent"`) {
+		t.Error("accent must not be a dropdown of hex values")
+	}
+	for _, want := range []string{`id="blog-accent"`, `class="accent-swatches"`, `name="blog-theme"`, `class="theme-options"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("panel missing visual picker markup: %q", want)
+		}
+	}
+	js, err := assets.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"松绿", "雾蓝", "赭石", "紫藤", "石青", "朱砂", "苔绿", "墨灰"} {
+		if !strings.Contains(string(js), name) {
+			t.Errorf("swatch names should be human readable, missing %q", name)
 		}
 	}
 }

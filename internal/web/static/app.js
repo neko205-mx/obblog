@@ -765,11 +765,50 @@ function blogError(message = "") {
   node.hidden = !message;
 }
 
+// Swatches show the color itself plus its name, because a hex value alone does
+// not tell an author what the page will look like.
+const ACCENT_NAMES = {
+  "#406c50": "松绿", "#2f6f8f": "雾蓝", "#8a5a3b": "赭石",
+  "#7a4b6d": "紫藤", "#3f5d7d": "石青", "#a0403f": "朱砂",
+  "#5c6b2f": "苔绿", "#3a3a3a": "墨灰",
+};
+
+function renderAccentSwatches(values, selected) {
+  const container = $("#blog-accent");
+  container.replaceChildren();
+  const current = selected || values[0] || "";
+  for (const value of values) {
+    const label = document.createElement("label");
+    label.className = "accent-swatch";
+    label.style.setProperty("--swatch", value);
+    label.title = `${ACCENT_NAMES[value] || value} ${value}`;
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "blog-accent";
+    radio.value = value;
+    radio.checked = value === current;
+    radio.onchange = () => { blogPreview(); };
+    label.append(radio, el("span", "accent-dot"), el("span", "accent-name", ACCENT_NAMES[value] || value));
+    container.append(label);
+  }
+}
+
+function selectedAccent() {
+  return document.querySelector('input[name="blog-accent"]:checked')?.value || "";
+}
+
+function selectedTheme() {
+  return document.querySelector('input[name="blog-theme"]:checked')?.value || "auto";
+}
+
 function blogPreview() {
-  const accent = $("#blog-accent").value;
+  const accent = selectedAccent();
   const title = $("#blog-title").value.trim() || "未命名博客";
   const author = $("#blog-author").value.trim();
-  $("#blog-preview").style.setProperty("--preview-accent", accent);
+  const preview = $("#blog-preview");
+  preview.style.setProperty("--preview-accent", accent);
+  // Mirror the mode so the preview strip does not lie about the saved scheme.
+  preview.dataset.theme = selectedTheme();
   $("#blog-preview-text").textContent = author ? `${title} · ${author}` : title;
 }
 
@@ -835,17 +874,9 @@ function renderBlog(config) {
   $("#blog-description").value = config.description || "";
   $("#blog-author").value = config.author || "";
   $("#blog-footer").value = config.footer || "";
-  const accent = $("#blog-accent");
-  accent.replaceChildren();
-  for (const value of config.accents || []) {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = value;
-    option.style.setProperty("--option-accent", value);
-    accent.append(option);
-  }
-  accent.value = config.accent || (config.accents || [])[0] || "";
-  $("#blog-theme").value = config.theme || "auto";
+  renderAccentSwatches(config.accents || [], config.accent);
+  const theme = config.theme || "auto";
+  for (const input of document.querySelectorAll('input[name="blog-theme"]')) input.checked = input.value === theme;
   renderBlogPages(config.pages);
   blogPreview();
   $("#panel-blog-state").textContent = config.vault || "";
@@ -857,13 +888,14 @@ function blogPayload() {
     description: $("#blog-description").value.trim(),
     author: $("#blog-author").value.trim(),
     footer: $("#blog-footer").value.trim(),
-    accent: $("#blog-accent").value,
-    theme: $("#blog-theme").value,
+    accent: selectedAccent(),
+    theme: selectedTheme(),
     pages: [...$("#blog-pages").querySelectorAll(".blog-page")].map((row) => row.getValue()),
   };
 }
 
-$("#blog-title").oninput = $("#blog-accent").onchange = $("#blog-author").oninput = blogPreview;
+$("#blog-title").oninput = $("#blog-author").oninput = blogPreview;
+for (const input of document.querySelectorAll('input[name="blog-theme"]')) input.onchange = blogPreview;
 $("#blog-add-page").onclick = () => {
   if (blogPagesCount() >= MAX_PAGES) { blogError(`最多 ${MAX_PAGES} 个独立页面`); return; }
   blogError();

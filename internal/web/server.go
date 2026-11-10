@@ -166,7 +166,10 @@ func protect(next http.Handler) http.Handler {
 		if strings.HasPrefix(r.URL.Path, "/admin") || strings.HasPrefix(r.URL.Path, "/install") {
 			w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 		}
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; media-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+		// The public blog injects one <style> block carrying the saved accent, so
+		// style-src has to allow inline stylesheets. Scripts stay restricted to
+		// 'self' and no script nonce or 'unsafe-inline' is granted.
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
 		protected.ServeHTTP(w, r)
 	})
 }

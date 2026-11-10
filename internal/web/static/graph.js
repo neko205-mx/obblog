@@ -327,6 +327,9 @@ export class GraphView {
     } else this.notify("笔记尚未创建");
   }
 
+  // Preference hook from the settings panel.
+  setHoverPreview(enabled) { this.hoverPreview = Boolean(enabled); this.scheduleDraw(); }
+
   scheduleDraw() {
     if (this.frame || !this.visible) return;
     this.frame = requestAnimationFrame(() => { this.frame = null; if (this.visible) this.draw(); });
@@ -408,6 +411,6 @@ export class GraphView {
     }
     ctx.globalAlpha = 1;
     this.$("zoom-value").textContent = `${Math.round(t.k * 100)}%`;
-    this.$("hover").textContent = active ? `${active.path || active.label} · ${active.degree} 个邻居` : "拖动空白处平移 · 滚轮缩放 · 点击节点阅读";
+    this.$("hover").textContent = active && this.hoverPreview !== false ? `${active.path || active.label} · ${active.degree} 个邻居` : "拖动空白处平移 · 滚轮缩放 · 点击节点阅读";
   }
 }

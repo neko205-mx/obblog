@@ -120,6 +120,8 @@ func (a *App) Handler() http.Handler {
 	private.HandleFunc("POST /api/publications/refresh", a.refreshPublications)
 	private.HandleFunc("GET /api/blog", a.blogSettings)
 	private.HandleFunc("POST /api/blog", a.blogSettings)
+	private.HandleFunc("GET /api/preferences", a.preferences)
+	private.HandleFunc("POST /api/preferences", a.preferences)
 	// Strip only the admin prefix; no private route is registered at the public root.
 	mux.Handle("/admin/", a.gate(http.StripPrefix("/admin", private)))
 	private.HandleFunc("GET /api/vault", a.tree)

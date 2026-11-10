@@ -153,6 +153,7 @@ export class NoteEditor {
 
   async preview(id) {
     if (!this.active || id !== this.previewID) return;
+    if (this.livePreview === false) { $("editor-preview-state").textContent = "实时预览已关闭"; return; }
     this.previewController = new AbortController();
     $("editor-preview-state").textContent = "更新预览…";
     try {
@@ -266,10 +267,17 @@ export class NoteEditor {
     } catch (error) { this.notify(error.message); }
   }
 
+  // Runtime preferences from the settings panel. Defaults keep the editor
+  // working before any configuration has been loaded.
+  setSpellcheck(enabled) { this.textarea.spellcheck = Boolean(enabled); }
+  setDraftGuard(enabled) { this.guardDrafts = Boolean(enabled); }
+  setLivePreview(enabled) { this.livePreview = Boolean(enabled); this.schedulePreview(0); }
+
   async mayLeave() {
     if (!this.active) return true;
     if (this.busy) { this.notify(this.uploading ? "正在上传图片，请稍后再切换" : "正在保存，请稍后再切换"); return false; }
     if (!this.draft.dirty) return true;
+    if (this.guardDrafts === false) return true;
     const result = await this.askUnsaved();
     if (result === "discard") return true;
     if (result === "save") return await this.save();

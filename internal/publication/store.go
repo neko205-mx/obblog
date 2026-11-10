@@ -72,6 +72,7 @@ type Store struct {
 	dir      string
 	articles map[string]*Article
 	blog     *Blog
+	values   map[string]bool
 	gitHead  string
 }
 
@@ -114,7 +115,10 @@ func Open(data, source string) (*Store, error) {
 		return nil, errors.New("发布数据目录不能位于笔记库内，请调整 -data")
 	}
 	hash := sha256.Sum256([]byte(source))
-	s := &Store{dir: filepath.Join(abs, "publications", hex.EncodeToString(hash[:16])), articles: map[string]*Article{}, blog: DefaultBlog()}
+	s := &Store{dir: filepath.Join(abs, "publications", hex.EncodeToString(hash[:16])), articles: map[string]*Article{}, blog: DefaultBlog(), values: map[string]bool{}}
+	if err = s.loadPreferences(); err != nil {
+		return nil, err
+	}
 	b, err := os.ReadFile(filepath.Join(s.dir, "publications.json"))
 	if errors.Is(err, fs.ErrNotExist) {
 		return s, nil

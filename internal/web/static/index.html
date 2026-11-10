@@ -115,15 +115,32 @@
 </dialog>
 <dialog class="app-dialog panel-dialog" id="panel-dialog" aria-labelledby="panel-title">
   <div class="admin-heading"><h2 id="panel-title">设置与工具</h2><button id="panel-close">关闭</button></div>
-  <div class="panel-tools">
-    <button type="button" id="panel-git">Git 管理</button>
-    <button type="button" id="panel-publish" disabled>发布设置</button>
-    <button type="button" id="panel-settings" hidden>系统设置</button>
-    <a id="panel-home" href="/" target="_blank" rel="noopener">公开首页 ↗</a>
-    <button type="button" id="panel-end-test" hidden>结束测试</button>
-    <button type="button" id="panel-logout">退出登录</button>
-  </div>
-  <section class="panel-blog" aria-labelledby="panel-blog-title">
+  <nav class="panel-tabs" role="tablist" aria-label="设置分区">
+    <button type="button" role="tab" data-panel-tab="tools" aria-selected="true">工具</button>
+    <button type="button" role="tab" data-panel-tab="general" aria-selected="false">常规</button>
+    <button type="button" role="tab" data-panel-tab="blog" aria-selected="false">博客</button>
+  </nav>
+
+  <section class="panel-section" data-panel-section="tools" role="tabpanel" aria-label="工具">
+    <div class="panel-tools">
+      <button type="button" id="panel-git">Git 管理</button>
+      <button type="button" id="panel-publish" disabled>发布设置</button>
+      <button type="button" id="panel-settings" hidden>系统设置</button>
+      <a id="panel-home" href="/" target="_blank" rel="noopener">公开首页 ↗</a>
+      <button type="button" id="panel-end-test" hidden>结束测试</button>
+      <button type="button" id="panel-logout">退出登录</button>
+    </div>
+    <p class="field-note">Git 同步、发布与账号设置集中在这里，不占用编辑区。</p>
+  </section>
+
+  <section class="panel-section" data-panel-section="general" role="tabpanel" aria-label="常规" hidden>
+    <div class="section-heading"><h3>可调整选项</h3><span id="panel-prefs-state" class="mode-badge"></span></div>
+    <p class="field-note">这些开关保存在发布数据目录，按知识库隔离；新增功能会出现在这里。</p>
+    <div id="panel-prefs" class="panel-prefs"></div>
+    <p id="prefs-error" class="panel-error" role="alert" hidden></p>
+  </section>
+
+  <section class="panel-section panel-blog" data-panel-section="blog" role="tabpanel" aria-label="博客" hidden>
     <div class="section-heading"><h3 id="panel-blog-title">博客设置</h3><span id="panel-blog-state" class="mode-badge"></span></div>
     <form id="blog-form">
       <div class="field-pair">

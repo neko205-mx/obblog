@@ -54,11 +54,25 @@ func (a *App) publicationStatus(w http.ResponseWriter, r *http.Request) {
 
 // blogConfig is what the settings panel loads. Accents and Themes drive the
 // pickers so the browser never invents a value the server would reject.
+// Preferences carries every switch the panel offers; new features register a
+// definition in publication and appear here without touching this type.
 type blogConfig struct {
 	*publication.Blog
-	Accents []string `json:"accents"`
-	Themes  []string `json:"themes"`
-	Vault   string   `json:"vault"`
+	Accents     []string                 `json:"accents"`
+	Themes      []string                 `json:"themes"`
+	Vault       string                   `json:"vault"`
+	Preferences []publication.Preference `json:"preferences"`
+}
+
+// preferenceLocks reports which switches the running installation cannot offer.
+func (a *App) preferenceLocks() map[string]string {
+	locked := map[string]string{}
+	if !a.writable {
+		for _, key := range []string{"editor.autoPreview", "editor.spellcheck", "editor.autoSaveDraft"} {
+			locked[key] = "当前知识库为只读模式"
+		}
+	}
+	return locked
 }
 
 func (a *App) blogConfigView() blogConfig {
@@ -66,7 +80,13 @@ func (a *App) blogConfigView() blogConfig {
 	if blog == nil {
 		blog = publication.DefaultBlog()
 	}
-	return blogConfig{Blog: blog, Accents: publication.Accents, Themes: []string{"auto", "light", "dark"}, Vault: a.vault.Name}
+	return blogConfig{
+		Blog:        blog,
+		Accents:     publication.Accents,
+		Themes:      []string{"auto", "light", "dark"},
+		Vault:       a.vault.Name,
+		Preferences: a.publications.Preferences(a.preferenceLocks()),
+	}
 }
 
 func (a *App) blogSettings(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +127,45 @@ func (a *App) saveBlogSettings(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	respond(w, blogConfig{Blog: cleaned, Accents: publication.Accents, Themes: []string{"auto", "light", "dark"}, Vault: a.vault.Name})
+	respond(w, blogConfig{
+		Blog:        cleaned,
+		Accents:     publication.Accents,
+		Themes:      []string{"auto", "light", "dark"},
+		Vault:       a.vault.Name,
+		Preferences: a.publications.Preferences(a.preferenceLocks()),
+	})
+}
+
+// preferences returns or updates the panel switches. Unknown or locked keys are
+// rejected, so the server stays the authority on what can be configured.
+func (a *App) preferences(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		respond(w, a.publications.Preferences(a.preferenceLocks()))
+	case http.MethodPost:
+		var input struct {
+			Values map[string]bool `json:"values"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 65536))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil || input.Values == nil {
+			fail(w, http.StatusBadRequest, "无效的设置请求")
+			return
+		}
+		var extra any
+		if err := decoder.Decode(&extra); err != io.EOF {
+			fail(w, http.StatusBadRequest, "无效的设置请求")
+			return
+		}
+		updated, err := a.publications.SetPreferences(input.Values, a.preferenceLocks())
+		if err != nil {
+			fail(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		respond(w, updated)
+	default:
+		fail(w, http.StatusMethodNotAllowed, "方法不允许")
+	}
 }
 
 func (a *App) setPublication(w http.ResponseWriter, r *http.Request) {

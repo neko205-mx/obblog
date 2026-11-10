@@ -892,19 +892,119 @@ $("#blog-form").onsubmit = async (event) => {
   finally { blogBusy = false; $("#blog-save").disabled = false; }
 };
 
+// --- Panel sections -----------------------------------------------------------
+const panelTabs = [...document.querySelectorAll("[data-panel-tab]")];
+const panelSections = [...document.querySelectorAll("[data-panel-section]")];
+
+function showPanelSection(name) {
+  for (const tab of panelTabs) tab.setAttribute("aria-selected", String(tab.dataset.panelTab === name));
+  for (const section of panelSections) section.hidden = section.dataset.panelSection !== name;
+  if (name === "general") loadPreferences();
+  if (name === "blog") loadBlog();
+}
+for (const tab of panelTabs) tab.onclick = () => showPanelSection(tab.dataset.panelTab);
+
 async function loadBlog() {
-  if (blogConfig) { $("#panel-blog-state").textContent = blogConfig.vault || ""; return; }
   $("#panel-blog-state").textContent = "读取中…";
   try { renderBlog(await api("/admin/api/blog")); }
   catch (error) { blogError(error.message); $("#panel-blog-state").textContent = ""; }
+}
+
+// --- Adjustable switches ------------------------------------------------------
+// Every switch is rendered from the server-side registry, so a new feature only
+// adds a definition in publication/packages and appears here automatically.
+let preferences = [];
+let preferencesBusy = false;
+
+function emptyState(message) { return el("p", "tree-message", message); }
+
+function renderPreferences(list) {
+  const container = $("#panel-prefs");
+  preferences = list;
+  container.replaceChildren();
+  if (!list.length) { container.append(emptyState("暂无可调整选项")); return; }
+  const sections = new Map();
+  for (const pref of list) {
+    if (!sections.has(pref.section)) sections.set(pref.section, []);
+    sections.get(pref.section).push(pref);
+  }
+  for (const [section, items] of sections) {
+    const group = el("div", "pref-group");
+    group.append(el("h4", "pref-group-title", section));
+    for (const pref of items) group.append(makePreferenceRow(pref));
+    container.append(group);
+  }
+}
+
+function makePreferenceRow(pref) {
+  const row = el("label", `pref-row${pref.locked ? " locked" : ""}`);
+  const text = el("div", "pref-text");
+  text.append(el("span", "pref-label", pref.label));
+  if (pref.note) text.append(el("small", "pref-note", pref.note));
+  if (pref.locked) text.append(el("small", "pref-locked", pref.locked));
+  const toggle = document.createElement("input");
+  toggle.type = "checkbox";
+  toggle.className = "pref-toggle";
+  toggle.checked = Boolean(pref.value);
+  toggle.disabled = Boolean(pref.locked) || preferencesBusy;
+  toggle.onchange = () => savePreference(pref.key, toggle.checked, toggle);
+  row.append(text, toggle);
+  return row;
+}
+
+async function savePreference(key, value, toggle) {
+  if (preferencesBusy) return;
+  preferencesBusy = true;
+  $("#prefs-error").hidden = true;
+  $("#panel-prefs-state").textContent = "保存中…";
+  try {
+    preferences = await api("/admin/api/preferences", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values: { [key]: value } }) });
+    renderPreferences(preferences);
+    applyPreferences(preferences);
+    $("#panel-prefs-state").textContent = "";
+  } catch (error) {
+    toggle.checked = !value;
+    $("#prefs-error").textContent = error.message;
+    $("#prefs-error").hidden = false;
+    $("#panel-prefs-state").textContent = "";
+  } finally { preferencesBusy = false; }
+}
+
+async function loadPreferences() {
+  $("#panel-prefs-state").textContent = "读取中…";
+  try {
+    preferences = await api("/admin/api/preferences");
+    renderPreferences(preferences);
+    applyPreferences(preferences);
+    $("#panel-prefs-state").textContent = "";
+  } catch (error) {
+    $("#prefs-error").textContent = error.message;
+    $("#prefs-error").hidden = false;
+    $("#panel-prefs-state").textContent = "";
+  }
+}
+
+// applyPreferences pushes switch values into the running UI. Unknown keys are
+// ignored so older browsers keep working after a server adds a feature.
+function applyPreferences(list) {
+  const value = (key, fallback) => {
+    const pref = list.find((item) => item.key === key);
+    return pref ? Boolean(pref.value) : fallback;
+  };
+  document.documentElement.classList.toggle("pref-no-live-preview", !value("editor.autoPreview", true));
+  editor.setLivePreview(value("editor.autoPreview", true));
+  editor.setSpellcheck(value("editor.spellcheck", false));
+  editor.setDraftGuard(value("editor.autoSaveDraft", true));
+  graphView.setHoverPreview(value("graph.hoverPreview", true));
 }
 
 $("#panel-button").onclick = async () => {
   if (editor.busy || gitBusy) return;
   if (!await leaveEditor()) return;
   $("#panel-publish").disabled = !state.note || state.view !== "note";
+  showPanelSection("tools");
   $("#panel-dialog").showModal();
-  loadBlog();
+  loadPreferences();
 };
 $("#panel-close").onclick = () => $("#panel-dialog").close();
-$("#panel-dialog").addEventListener("cancel", (event) => { if (blogBusy) event.preventDefault(); });
+$("#panel-dialog").addEventListener("cancel", (event) => { if (blogBusy || preferencesBusy) event.preventDefault(); });

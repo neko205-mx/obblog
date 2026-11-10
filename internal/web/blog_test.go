@@ -258,3 +258,106 @@ func TestResolvePublishedMirrorsVaultPreference(t *testing.T) {
 		}
 	}
 }
+
+func prefsRequest(t *testing.T, a *App, method string, payload any) (*httptestResponse, []publication.Preference) {
+	t.Helper()
+	var body any
+	if payload != nil {
+		body = payload
+	}
+	w := editRequest(testHandler(t, a), method, "/admin/api/preferences", body)
+	var result []publication.Preference
+	if w.Code == 200 {
+		if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+			t.Fatalf("decode preferences: %v (%s)", err, w.Body.String())
+		}
+	}
+	return &httptestResponse{w.Code, w.Body.String()}, result
+}
+
+func prefValue(list []publication.Preference, key string) (bool, bool) {
+	for _, pref := range list {
+		if pref.Key == key {
+			return pref.Value, true
+		}
+	}
+	return false, false
+}
+
+// TestPreferencesAreRegistryDriven asserts the panel is fed by the registry, so
+// new features appear without a bespoke UI field.
+func TestPreferencesAreRegistryDriven(t *testing.T) {
+	a, _, _ := publishFixture(t)
+	response, list := prefsRequest(t, a, "GET", nil)
+	if response.Code != 200 {
+		t.Fatalf("GET: %d %s", response.Code, response.Body)
+	}
+	if len(list) != len(publication.PreferenceKeys()) {
+		t.Fatalf("panel received %d options, registry has %d", len(list), len(publication.PreferenceKeys()))
+	}
+	for _, pref := range list {
+		if pref.Kind != "toggle" || pref.Label == "" || pref.Section == "" {
+			t.Errorf("option not renderable: %+v", pref)
+		}
+		if pref.Value != pref.Default {
+			t.Errorf("unset option %s = %v, want default %v", pref.Key, pref.Value, pref.Default)
+		}
+	}
+}
+
+func TestPreferencesToggleAndReject(t *testing.T) {
+	a, _, _ := publishFixture(t)
+	key := "editor.spellcheck"
+	response, list := prefsRequest(t, a, "POST", map[string]any{"values": map[string]bool{key: true}})
+	if response.Code != 200 {
+		t.Fatalf("save: %d %s", response.Code, response.Body)
+	}
+	if value, ok := prefValue(list, key); !ok || !value {
+		t.Fatalf("%s was not enabled: %+v", key, list)
+	}
+
+	// Persisted across a fresh open of the same data directory.
+	_, list = prefsRequest(t, a, "GET", nil)
+	if value, _ := prefValue(list, key); !value {
+		t.Fatal("preference did not survive a reload")
+	}
+
+	for _, payload := range []map[string]any{
+		{"values": map[string]bool{"no.such.option": true}},
+		{},
+	} {
+		if response, _ := prefsRequest(t, a, "POST", payload); response.Code != 400 {
+			t.Errorf("payload %v: want 400, got %d", payload, response.Code)
+		}
+	}
+}
+
+// TestPreferencesRejectLockedOptions makes sure a read-only vault cannot be
+// flipped into an editable-only behaviour by a crafted request.
+func TestPreferencesRejectLockedOptions(t *testing.T) {
+	dir := t.TempDir()
+	a, err := NewWithOptions(dir, Options{Password: testPassword, Writable: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { a.Close() })
+	_, list := prefsRequest(t, a, "GET", nil)
+	for _, pref := range list {
+		if strings.HasPrefix(pref.Key, "editor.") && pref.Locked == "" {
+			t.Errorf("%s must be locked on a read-only vault", pref.Key)
+		}
+	}
+	if response, _ := prefsRequest(t, a, "POST", map[string]any{"values": map[string]bool{"editor.autoPreview": false}}); response.Code != 400 {
+		t.Fatalf("locked option must be rejected, got %d", response.Code)
+	}
+}
+
+func TestPreferencesRequireAuthentication(t *testing.T) {
+	a, _, _ := publishFixture(t)
+	handler := a.Handler()
+	for _, method := range []string{"GET", "POST"} {
+		if w := editRequest(handler, method, "/admin/api/preferences", map[string]any{"values": map[string]bool{}}); w.Code != 401 {
+			t.Fatalf("%s without a session: %d", method, w.Code)
+		}
+	}
+}

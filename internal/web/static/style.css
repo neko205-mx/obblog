@@ -1,10 +1,5 @@
-/* Colors come from /theme.css, generated from the saved configuration. Only
-   typography is declared here so one palette drives every surface. */
-:root {
-  --serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", Georgia, serif;
-  --sans: "LXGW WenKai", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --mono: "JetBrains Mono", "Cascadia Code", "Noto Sans Mono", Consolas, monospace;
-}
+/* Palette and font stacks come from /theme.css, generated from the saved
+   configuration, so every surface shares one definition. */
 
 .publication-dialog { width: min(480px, calc(100% - 32px)); }
 .publication-note-title { color: var(--muted); overflow-wrap: anywhere; }

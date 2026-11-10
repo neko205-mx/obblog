@@ -601,7 +601,8 @@ $("#theme-button").onclick = async () => {
   document.documentElement.dataset.theme = next;
   try {
     const config = await api("/admin/api/blog");
-    const saved = await api("/admin/api/blog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...config, theme: next }) });
+    const payload = blogSettingsPayload({ ...config, theme: next });
+    const saved = await api("/admin/api/blog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     if (blogConfig) renderBlog(saved);
     toast(next === "dark" ? "已切换到深色模式" : "已切换到浅色模式");
   } catch (error) {
@@ -889,6 +890,27 @@ function renderBlog(config) {
   $("#panel-blog-state").textContent = config.vault || "";
 }
 
+// The GET response carries read-only extras (accents, themes, vault,
+// preferences). The server rejects unknown fields, so only the editable
+// configuration may be sent back.
+function blogSettingsPayload(config) {
+  return {
+    title: config.title ?? "",
+    description: config.description ?? "",
+    author: config.author ?? "",
+    footer: config.footer ?? "",
+    accent: config.accent ?? "",
+    theme: config.theme ?? "auto",
+    pages: (config.pages ?? []).map((page) => ({
+      slug: page.slug ?? "",
+      title: page.title ?? "",
+      source: page.source ?? "",
+      createdAt: page.createdAt,
+      updatedAt: page.updatedAt,
+    })),
+  };
+}
+
 function blogPayload() {
   return {
     title: $("#blog-title").value.trim(),
@@ -1048,7 +1070,7 @@ async function saveAppearance() {
   try {
     const saved = await api("/admin/api/blog", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...blogConfig, accent: selectedAccent(), theme: selectedTheme() }),
+      body: JSON.stringify(blogSettingsPayload({ ...blogConfig, accent: selectedAccent(), theme: selectedTheme() })),
     });
     blogConfig = saved;
     applyDocumentTheme(selectedTheme());

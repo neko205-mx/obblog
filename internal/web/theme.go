@@ -7,6 +7,14 @@ import (
 	"obblog/internal/publication"
 )
 
+// fontVariables is shared by every page. They live in theme.css because the
+// per-page sheets only reference the stacks; a missing definition invalidates
+// the whole `font:` shorthand that uses it.
+const fontVariables = `  --serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", Georgia, serif;
+  --sans: "LXGW WenKai", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Code", "Noto Sans Mono", Consolas, monospace;
+`
+
 // themeCSS renders the shared palette. Every page — the admin workspace, the
 // login and installer screens, the settings page and the public blog — links
 // this one stylesheet, so the accent and light/dark choice saved in the panel
@@ -29,6 +37,7 @@ func themeCSS(blog *publication.Blog) string {
 	dark := themeVars(accent, true)
 
 	b.WriteString(":root {\n")
+	b.WriteString(fontVariables)
 	b.WriteString(light.css())
 	b.WriteString("}\n")
 

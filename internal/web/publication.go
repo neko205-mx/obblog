@@ -107,7 +107,9 @@ func (a *App) saveBlogSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	var input publication.Blog
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20))
-	decoder.DisallowUnknownFields()
+	// Unknown fields are tolerated: the panel round-trips the GET response,
+	// which also carries read-only extras. publication.SetBlog remains the
+	// authority on which values are valid.
 	if err := decoder.Decode(&input); err != nil {
 		var limit *http.MaxBytesError
 		if errors.As(err, &limit) {

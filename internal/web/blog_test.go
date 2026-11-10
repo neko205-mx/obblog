@@ -1,7 +1,9 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -443,6 +445,71 @@ func TestBlogPanelOffersVisualPickers(t *testing.T) {
 	for _, name := range []string{"松绿", "雾蓝", "赭石", "紫藤", "石青", "朱砂", "苔绿", "墨灰"} {
 		if !strings.Contains(string(js), name) {
 			t.Errorf("swatch names should be human readable, missing %q", name)
+		}
+	}
+}
+
+// TestBlogSettingsAcceptRoundTrippedResponse reproduces the failing flow: the
+// panel loads the configuration, changes one field and posts the whole payload
+// back. The GET response includes read-only extras, so the handler must not
+// reject them as unknown fields.
+func TestBlogSettingsAcceptRoundTrippedResponse(t *testing.T) {
+	a, _, _ := publishFixture(t)
+	handler := testHandler(t, a)
+
+	loaded := editRequest(handler, "GET", "/admin/api/blog", nil)
+	if loaded.Code != 200 {
+		t.Fatalf("GET: %d %s", loaded.Code, loaded.Body)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(loaded.Body.Bytes(), &config); err != nil {
+		t.Fatal(err)
+	}
+	// The response carries read-only keys the client cannot send back blindly.
+	for _, extra := range []string{"accents", "themes", "vault", "preferences"} {
+		if _, ok := config[extra]; !ok {
+			t.Fatalf("expected %s in the GET response", extra)
+		}
+	}
+
+	config["accent"] = publication.Accents[1]
+	body, _ := json.Marshal(config)
+	r := httptest.NewRequest("POST", "/admin/api/blog", bytes.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatalf("round-tripped save failed: %d %s", w.Code, w.Body)
+	}
+
+	_, current := blogRequest(t, a, "GET", nil)
+	if current.Accent != publication.Accents[1] {
+		t.Fatalf("accent not saved: %s", current.Accent)
+	}
+}
+
+// TestThemeCssDefinesFontStacks guards a failure that is invisible in markup:
+// blog.css uses `font: ... var(--serif)`, and an undefined variable invalidates
+// the whole shorthand, collapsing headings to the 16px default and making them
+// overlap.
+func TestThemeCssDefinesFontStacks(t *testing.T) {
+	css := themeCSS(publication.DefaultBlog())
+	for _, token := range []string{"--serif:", "--sans:", "--mono:"} {
+		if !strings.Contains(css, token) {
+			t.Errorf("theme.css must define %s", token)
+		}
+	}
+	// Any sheet that consumes a stack must not be the only place it is named.
+	for _, name := range []string{"blog.css", "style.css"} {
+		data, err := assets.ReadFile("static/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), "var(--serif)") && !strings.Contains(string(data), "var(--sans)") {
+			continue
+		}
+		if strings.Contains(string(data), "--serif:") || strings.Contains(string(data), "--sans:") {
+			t.Errorf("%s should rely on theme.css rather than redeclaring stacks", name)
 		}
 	}
 }

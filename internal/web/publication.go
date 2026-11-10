@@ -324,6 +324,16 @@ func (a *App) publicRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /pages/{slug}", a.publicStandalone)
 	mux.HandleFunc("GET /media/{id}/{blob}", a.publicAsset)
 	mux.HandleFunc("GET /blog.css", func(w http.ResponseWriter, r *http.Request) { a.static(w, r, "blog.css") })
+	// Liveness probe for the container runtime. It touches the store so a
+	// wedged process, not just a closed listener, gets reported.
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		if a.publications == nil {
+			fail(w, http.StatusServiceUnavailable, "unavailable")
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Write([]byte("ok"))
+	})
 }
 
 func (a *App) publicSnapshot() map[string]*publication.Article {

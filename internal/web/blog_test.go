@@ -513,3 +513,16 @@ func TestThemeCssDefinesFontStacks(t *testing.T) {
 		}
 	}
 }
+
+// TestHealthEndpointReportsReadiness covers the endpoint the container health
+// check polls; it must not require a session or leak vault contents.
+func TestHealthEndpointReportsReadiness(t *testing.T) {
+	a, _, _ := publishFixture(t)
+	w := editRequest(a.Handler(), "GET", "/healthz", nil)
+	if w.Code != 200 {
+		t.Fatalf("healthz: %d %s", w.Code, w.Body)
+	}
+	if body := strings.TrimSpace(w.Body.String()); body != "ok" {
+		t.Errorf("healthz body = %q, want ok", body)
+	}
+}

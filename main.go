@@ -29,7 +29,15 @@ func main() {
 	flag.BoolVar(&options.Git, "git", true, "Legacy vault mode: enable Git sync when the directory is a checkout (enabled by default)")
 	flag.BoolVar(&options.SecureCookie, "secure-cookie", false, "Legacy vault mode: force secure cookies (HTTPS is detected automatically)")
 	flag.BoolVar(&options.Test, "test", false, "Use a disposable test installation and remove all its data on shutdown")
+	probe := flag.String("probe", "", "Probe the running server at this URL and exit; used by container health checks")
 	flag.Parse()
+	if *probe != "" {
+		if err := probeServer(*probe); err != nil {
+			log.Print(err)
+			os.Exit(1)
+		}
+		return
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx, options); err != nil {
@@ -100,4 +108,19 @@ func run(parent context.Context, options startOptions) (result error) {
 		serveErr = fmt.Errorf("serve: %w", serveErr)
 	}
 	return errors.Join(serveErr, shutdownErr)
+}
+
+// probeServer checks /healthz on a running instance. The shipped image has no
+// HTTP client, so the binary probes itself for the container health check.
+func probeServer(url string) error {
+	client := &http.Client{Timeout: 4 * time.Second}
+	response, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("probe: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("probe: unexpected status %d", response.StatusCode)
+	}
+	return nil
 }

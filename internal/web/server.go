@@ -39,6 +39,9 @@ type App struct {
 	git          *gitsync.Service
 	publications *publication.Store
 	updates      *updater.Checker
+	installMu    sync.Mutex
+	installing   bool
+	dataDir      string
 	opMu         sync.RWMutex
 }
 
@@ -88,6 +91,7 @@ func NewWithOptions(dir string, options Options) (*App, error) {
 	if data == "" {
 		data = "./data"
 	}
+	a.dataDir = data
 	a.publications, err = publication.Open(data, v.Path)
 	if err != nil {
 		v.Close()
@@ -126,6 +130,8 @@ func (a *App) Handler() http.Handler {
 	private.HandleFunc("POST /api/blog", a.blogSettings)
 	private.HandleFunc("GET /api/version", func(w http.ResponseWriter, r *http.Request) { respond(w, version.Current()) })
 	private.HandleFunc("GET /api/update", a.updateStatus)
+	private.HandleFunc("POST /api/update/install", a.updateInstall)
+	private.HandleFunc("POST /api/update/restart", a.updateRestart)
 	private.HandleFunc("GET /api/preferences", a.preferences)
 	private.HandleFunc("POST /api/preferences", a.preferences)
 	// Strip only the admin prefix; no private route is registered at the public root.

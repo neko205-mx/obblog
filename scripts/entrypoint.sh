@@ -1,23 +1,38 @@
 #!/bin/sh
 # Starts the newest installed build.
 #
-# A self-update writes the new binary under /data/bin and exits; this script
-# then picks it up on the next start. Keeping the choice here means the
-# container restarts onto the updated build without being recreated, while
-# /data stays the single volume that has to be backed up.
+# A self-update stages the new binary under <data>/bin and replaces the running
+# process. This launcher is what makes the staged copy survive a container
+# restart: it is chosen here, so /data stays the single volume to back up.
 set -eu
 
 IMAGE_BINARY=/usr/local/bin/obblog
-DATA_BINARY=/data/bin/obblog
 
+# Resolve the data directory from -data, matching the server's own default.
+# Hardcoding /data would miss custom mounts and silently start the old build.
+data_dir=/data
+previous=
+for arg in "$@"; do
+    if [ "$previous" = "-data" ]; then
+        data_dir=$arg
+        break
+    fi
+    case $arg in
+        -data=*) data_dir=${arg#-data=}; break ;;
+    esac
+    previous=$arg
+done
+
+staged=$data_dir/bin/obblog
 binary=$IMAGE_BINARY
-if [ -x "$DATA_BINARY" ]; then
-    # Refuse a binary the updater left half-written: it is renamed into place
-    # atomically, so a partial file here means something went wrong.
-    if "$DATA_BINARY" -version >/dev/null 2>&1; then
-        binary=$DATA_BINARY
+if [ -x "$staged" ]; then
+    # The updater renames the file into place only after verification, so a
+    # binary that cannot even report its version means something went wrong
+    # outside that path and the image build is the safer choice.
+    if "$staged" -version >/dev/null 2>&1; then
+        binary=$staged
     else
-        echo "updater: /data/bin/obblog failed to run, falling back to the image build" >&2
+        echo "updater: $staged failed to run, falling back to the image build" >&2
     fi
 fi
 

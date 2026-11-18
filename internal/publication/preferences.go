@@ -65,6 +65,15 @@ var prefs = []preferenceDef{
 		Section: "阅读",
 		Default: true,
 	},
+	{
+		Key:   "update.autoInstall",
+		Label: "自动安装更新",
+		// Default false on purpose: installing replaces the running server
+		// binary, so it stays a deliberate choice rather than an opt-out.
+		Note:    "检测到新版本后自动下载并安装。关闭时仅提示，需要手动点击「立即更新」。",
+		Section: "更新",
+		Default: false,
+	},
 }
 
 // prefsFile is stored under the publication directory so a blog's options stay

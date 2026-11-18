@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -71,10 +72,16 @@ func NewChecker(repo string) *Checker {
 	if repo == "" {
 		repo = DefaultRepo
 	}
+	base := "https://api.github.com"
+	// A custom endpoint lets an installation behind a mirror or a proxy use the
+	// same checks without reaching GitHub directly.
+	if override := os.Getenv("OBBLOG_UPDATE_API"); override != "" {
+		base = override
+	}
 	return &Checker{
 		Repo:    repo,
 		Client:  &http.Client{Timeout: checkTimeout},
-		APIBase: "https://api.github.com",
+		APIBase: base,
 	}
 }
 

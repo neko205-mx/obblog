@@ -1127,7 +1127,10 @@ async function checkForUpdate() {
     if (status.url) link.href = status.url;
     if (status.available) {
       $("#version-state").textContent = "有新版本";
-      $("#version-message").textContent = "新版本尚未安装；自动安装需要签名密钥，当前仅供查看。";
+      // Installing replaces the running server binary, so it is always an
+      // explicit click. The preference only changes the wording below.
+      $("#version-install").hidden = false;
+      $("#version-message").textContent = "新版本已就绪，点击「立即更新」下载并验证签名。安装后需要重启服务生效。";
       if (status.notes) {
         $("#version-notes").textContent = status.notes;
         $("#version-notes-wrap").hidden = false;
@@ -1149,6 +1152,48 @@ async function checkForUpdate() {
 }
 
 $("#version-check").onclick = checkForUpdate;
+
+// installUpdate downloads and stages the release. Restarting stays a separate
+// step because the process must answer this request before it is replaced.
+async function installUpdate() {
+  if (versionBusy) return;
+  versionBusy = true;
+  $("#version-install").disabled = true;
+  $("#version-check").disabled = true;
+  $("#version-state").textContent = "更新中…";
+  $("#version-message").textContent = "正在下载并校验签名…";
+  try {
+    const result = await api("/admin/api/update/install", { method: "POST" });
+    $("#version-state").textContent = "已下载";
+    $("#version-message").textContent = `${result.version} 已校验通过，正在重启…`;
+    await restartIntoUpdate();
+  } catch (error) {
+    $("#version-state").textContent = "更新失败";
+    $("#version-message").textContent = error.message;
+    $("#version-install").disabled = false;
+    $("#version-check").disabled = false;
+  } finally { versionBusy = false; }
+}
+
+// The process is replaced by the new build, so wait for the port to answer
+// again instead of trusting the request that started it.
+async function restartIntoUpdate() {
+  try {
+    await api("/admin/api/update/restart", { method: "POST" });
+  } catch { /* The connection usually drops mid-restart; recovery below decides. */ }
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    try {
+      const response = await fetch("/admin/api/version", { cache: "no-store" });
+      if (response.ok) { location.reload(); return; }
+    } catch { /* Still restarting. */ }
+  }
+  $("#version-state").textContent = "重启超时";
+  $("#version-message").textContent = "服务在 30 秒内没有恢复，请检查容器日志。";
+}
+
+$("#version-install").onclick = installUpdate;
 
 $("#panel-button").onclick = async () => {
   if (editor.busy || gitBusy) return;

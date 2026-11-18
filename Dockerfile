@@ -8,11 +8,14 @@ COPY . .
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=unknown
+# Base64 Ed25519 public key. Empty disables self-update but keeps version checks.
+ARG SIGNING_PUBKEY=
 RUN CGO_ENABLED=0 go build -trimpath \
     -ldflags="-s -w \
       -X 'obblog/internal/version.Version=${VERSION}' \
       -X 'obblog/internal/version.Commit=${COMMIT}' \
-      -X 'obblog/internal/version.Date=${BUILD_DATE}'" \
+      -X 'obblog/internal/version.Date=${BUILD_DATE}' \
+      -X 'obblog/internal/updater.PublicKey=${SIGNING_PUBKEY}'" \
     -o /out/obblog .
 
 FROM debian:bookworm-slim

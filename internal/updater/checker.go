@@ -37,8 +37,6 @@ type Release struct {
 	PublishedAt time.Time `json:"publishedAt"`
 	// ChecksumsURL is the release asset holding SHA256SUMS.
 	ChecksumsURL string `json:"-"`
-	// SignatureURL is the detached signature over SHA256SUMS.
-	SignatureURL string `json:"-"`
 	// BinaryURL is the asset matching this build's OS and architecture.
 	BinaryURL string `json:"-"`
 	// BinaryName is the expected asset filename.
@@ -160,8 +158,6 @@ func (c *Checker) Latest(ctx context.Context) (*Release, error) {
 			release.BinaryURL, release.BinaryName, release.BinarySize = asset.URL, asset.Name, asset.Size
 		case "SHA256SUMS":
 			release.ChecksumsURL = asset.URL
-		case "SHA256SUMS.sig":
-			release.SignatureURL = asset.URL
 		}
 	}
 	return release, nil
@@ -182,9 +178,9 @@ func (c *Checker) Status(ctx context.Context) Status {
 	status.URL = release.URL
 	status.PublishedAt = &release.PublishedAt
 	status.Available = version.Newer(release.Tag, version.Version)
-	if status.Available && (release.BinaryURL == "" || release.ChecksumsURL == "" || release.SignatureURL == "") {
+	if status.Available && (release.BinaryURL == "" || release.ChecksumsURL == "") {
 		status.Available = false
-		status.Error = "该版本缺少 " + AssetName() + " 或签名文件，无法自动更新"
+		status.Error = "该版本缺少 " + AssetName() + " 或校验和文件，无法自动更新"
 	}
 	return status
 }

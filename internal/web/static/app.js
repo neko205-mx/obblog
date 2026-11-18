@@ -1130,7 +1130,7 @@ async function checkForUpdate() {
       // Installing replaces the running server binary, so it is always an
       // explicit click. The preference only changes the wording below.
       $("#version-install").hidden = false;
-      $("#version-message").textContent = "新版本已就绪，点击「立即更新」下载并验证签名。安装后需要重启服务生效。";
+      $("#version-message").textContent = "新版本已就绪，点击「立即更新」下载并校验。安装后需要重启服务生效。";
       if (status.notes) {
         $("#version-notes").textContent = status.notes;
         $("#version-notes-wrap").hidden = false;
@@ -1161,7 +1161,7 @@ async function installUpdate() {
   $("#version-install").disabled = true;
   $("#version-check").disabled = true;
   $("#version-state").textContent = "更新中…";
-  $("#version-message").textContent = "正在下载并校验签名…";
+  $("#version-message").textContent = "正在下载并校验…";
   try {
     const result = await api("/admin/api/update/install", { method: "POST" });
     $("#version-state").textContent = "已下载";

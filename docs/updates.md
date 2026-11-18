@@ -20,7 +20,7 @@ obblog -version          # v1.2.3 (abcdef1)
 
 - 只比较数字部分，`v1.2.3-rc1` 视为 `1.2.3`，正式安装不会收到预发布版
 - 草稿和预发布版本一律忽略
-- 必须同时存在 `obblog-<os>-<arch>`、`SHA256SUMS`、`SHA256SUMS.sig` 才标记为可更新
+- 必须同时存在 `obblog-<os>-<arch>` 和 `SHA256SUMS` 才标记为可更新
 - 网络失败、限流、仓库无 Release 都只作为提示信息返回，不影响服务运行
 
 GitHub 未认证 API 按 IP 限制 60 次/小时。用尽时提示「GitHub API 访问次数已用尽」，属于临时状态，稍后重试即可。
@@ -33,17 +33,13 @@ GitHub 未认证 API 按 IP 限制 60 次/小时。用尽时提示「GitHub API 
 obblog-linux-amd64
 obblog-linux-arm64
 SHA256SUMS
-SHA256SUMS.sig
 ```
 
-工作流在发布前会用公钥验证签名，签名或密钥缺失直接失败——**签名不是可选项**，因为更新会在服务器上执行下载的代码。
+**当前不做签名。** 校验和只能发现传输损坏或截断，**不能证明文件来源**——如果攻击者能篡改 GitHub 上的文件，他也能同时改掉 `SHA256SUMS`，校验依然通过。
 
-需要的仓库配置：
+这是有意接受的取舍：更新源通过配置信任，因此需要确保发布仓库（`neko205-mx/obblog`）的账号安全。如果以后要分发给不受控的第三方，应改为签名校验。
 
-| 名称 | 类型 | 内容 |
-| --- | --- | --- |
-| `OBBLOG_SIGNING_KEY` | Secret | minisign 私钥全文 |
-| `OBBLOG_SIGNING_PUBKEY` | Variable | 公钥，用于工作流自检 |
+不需要任何仓库 Secret 或 Variable。
 
 本地手动发布：
 
@@ -71,13 +67,12 @@ podman build --build-arg VERSION=v1.2.3 \
 点击「立即更新」后依次执行：
 
 1. 请求 `GET /admin/api/update/install`
-2. 下载 `SHA256SUMS` 与 `SHA256SUMS.sig`，先用内置公钥验签
-3. 从校验和文件中取出本平台二进制的摘要
-4. 下载二进制到 `<data>/bin/.download-*`，边写边算 SHA-256
-5. 比对摘要，不符则删除临时文件并拒绝
-6. 校验 ELF 头与架构，防止下错平台
-7. `chmod 0755` 后原子 `rename` 到 `<data>/bin/obblog`
-8. 请求 `POST /admin/api/update/restart`
+2. 下载 `SHA256SUMS`，取出本平台二进制的摘要
+3. 下载二进制到 `<data>/bin/.download-*`，边写边算 SHA-256
+4. 比对摘要，不符则删除临时文件并拒绝
+5. 校验 ELF 头与架构，防止下错平台
+6. `chmod 0755` 后原子 `rename` 到 `<data>/bin/obblog`
+7. 请求 `POST /admin/api/update/restart`
 
 重启使用 `syscall.Exec` 替换进程映像，PID 不变，因此容器不需要重建，健康检查持续有效。前端在重启后轮询 `/admin/api/version`，恢复即自动刷新页面，30 秒未恢复则提示检查日志。
 
@@ -86,10 +81,6 @@ podman build --build-arg VERSION=v1.2.3 \
 ### 安装目录
 
 **安装目录跟随 `-data`，不是硬编码 `/data`**。`-data /v/data` 时写到 `/v/data/bin/obblog`。这与 entrypoint 的解析逻辑一致，容器重启后仍能选中新版本。
-
-### 无公钥时
-
-构建时未注入 `SIGNING_PUBKEY` 的镜像只显示版本检查，安装按钮不会出现，API 返回 409。这样未签名的构建无法被诱导执行下载。
 
 ## 运行时布局
 

@@ -52,7 +52,7 @@ func withVersion(t *testing.T, value string) {
 func TestStatusReportsUpgrade(t *testing.T) {
 	withVersion(t, "v1.0.0")
 	want := AssetName()
-	checker := releaseServer(t, 200, releaseJSON("v1.1.0", want, "SHA256SUMS", "SHA256SUMS.sig"))
+	checker := releaseServer(t, 200, releaseJSON("v1.1.0", want, "SHA256SUMS"))
 
 	status := checker.Status(context.Background())
 	if status.Error != "" {
@@ -73,7 +73,7 @@ func TestStatusIgnoresSameOrOlder(t *testing.T) {
 	want := AssetName()
 	for _, tag := range []string{"v1.0.0", "v0.9.0"} {
 		withVersion(t, "v1.0.0")
-		checker := releaseServer(t, 200, releaseJSON(tag, want, "SHA256SUMS", "SHA256SUMS.sig"))
+		checker := releaseServer(t, 200, releaseJSON(tag, want, "SHA256SUMS"))
 		status := checker.Status(context.Background())
 		if status.Available {
 			t.Errorf("%s must not be offered over v1.0.0", tag)
@@ -81,23 +81,9 @@ func TestStatusIgnoresSameOrOlder(t *testing.T) {
 	}
 }
 
-// A release without a signed checksum cannot be trusted, so it must not be
-// advertised as installable even when the version is newer.
-func TestStatusRejectsReleaseWithoutSignature(t *testing.T) {
-	withVersion(t, "v1.0.0")
-	checker := releaseServer(t, 200, releaseJSON("v2.0.0", AssetName(), "SHA256SUMS"))
-	status := checker.Status(context.Background())
-	if status.Available {
-		t.Error("unsigned release must not be offered")
-	}
-	if !strings.Contains(status.Error, "签名") {
-		t.Errorf("error should explain the missing signature: %q", status.Error)
-	}
-}
-
 func TestStatusRejectsReleaseWithoutBinaryForPlatform(t *testing.T) {
 	withVersion(t, "v1.0.0")
-	checker := releaseServer(t, 200, releaseJSON("v2.0.0", "obblog-plan9-mips", "SHA256SUMS", "SHA256SUMS.sig"))
+	checker := releaseServer(t, 200, releaseJSON("v2.0.0", "obblog-plan9-mips", "SHA256SUMS"))
 	status := checker.Status(context.Background())
 	if status.Available {
 		t.Error("release without a matching binary must not be offered")
@@ -151,7 +137,7 @@ func TestStatusHandlesUnreachableServer(t *testing.T) {
 // A dev build has no comparable version, so it should accept any release.
 func TestStatusAllowsDevBuildToUpgrade(t *testing.T) {
 	withVersion(t, "dev")
-	checker := releaseServer(t, 200, releaseJSON("v1.0.0", AssetName(), "SHA256SUMS", "SHA256SUMS.sig"))
+	checker := releaseServer(t, 200, releaseJSON("v1.0.0", AssetName(), "SHA256SUMS"))
 	if status := checker.Status(context.Background()); !status.Available {
 		t.Fatalf("dev build should see v1.0.0 as an upgrade: %+v", status)
 	}

@@ -22,36 +22,34 @@ const (
 	// fill the data volume.
 	maxBinarySize = 64 << 20
 	maxSumsSize   = 1 << 20
-	maxSigSize    = 4 << 10
 	downloadWait  = 3 * time.Minute
 )
 
-// Installer downloads and verifies a release binary.
+// Installer downloads a release binary and stages it for the next start.
 //
-// It never starts the new build: staging the file under /data/bin is the whole
-// job. Restarting is a separate decision the caller makes after reporting
-// success, which keeps a failed restart from looking like a failed download.
+// It never starts the new build: staging the file is the whole job. Restarting
+// is a separate decision the caller makes after reporting success, which keeps
+// a failed restart from looking like a failed download.
 type Installer struct {
 	Client *http.Client
 	// Dir is where the binary is staged; it must be writable.
 	Dir string
-	// PublicKey overrides the package default when non-empty (used by tests).
-	PublicKey string
 }
 
 // Install downloads release into Dir, verifies it and returns the path to the
 // staged binary. The file is renamed into place only after every check passes,
-// so a partial download never becomes /data/bin/obblog.
+// so a partial download never becomes <data>/bin/obblog.
+//
+// Verification here covers corruption, not origin: the checksum and the binary
+// come from the same channel, so this detects a broken transfer or a truncated
+// file but cannot prove who published it. The update source is therefore
+// trusted by configuration — keep the release repository under your control.
 func (in *Installer) Install(ctx context.Context, release *Release) (string, error) {
-	if release.BinaryURL == "" || release.ChecksumsURL == "" || release.SignatureURL == "" {
+	if release.BinaryURL == "" || release.ChecksumsURL == "" {
 		return "", errors.New("该版本缺少必需的发布文件")
 	}
-	key, err := parsePublicKey(in.key())
-	if err != nil {
-		return "", err
-	}
-	// Readable by the service account only; the entrypoint runs as that user.
-	if err = os.MkdirAll(in.Dir, 0o755); err != nil {
+	// Readable by the service account; the entrypoint runs as that user.
+	if err := os.MkdirAll(in.Dir, 0o755); err != nil {
 		return "", fmt.Errorf("无法创建更新目录: %w", err)
 	}
 
@@ -61,15 +59,6 @@ func (in *Installer) Install(ctx context.Context, release *Release) (string, err
 	sums, err := in.fetch(ctx, release.ChecksumsURL, maxSumsSize)
 	if err != nil {
 		return "", fmt.Errorf("下载校验和失败: %w", err)
-	}
-	signature, err := in.fetch(ctx, release.SignatureURL, maxSigSize)
-	if err != nil {
-		return "", fmt.Errorf("下载签名失败: %w", err)
-	}
-	// Signature comes first: the checksum file is untrusted until it verifies,
-	// so there is no point reading values out of it before this passes.
-	if !Verify(key, sums, signature) {
-		return "", errors.New("校验和签名无效，已拒绝更新")
 	}
 	want, err := expectedSum(sums, release.BinaryName)
 	if err != nil {
@@ -121,13 +110,6 @@ func (in *Installer) Install(ctx context.Context, release *Release) (string, err
 		return "", fmt.Errorf("替换可执行文件失败: %w", err)
 	}
 	return final, nil
-}
-
-func (in *Installer) key() string {
-	if in.PublicKey != "" {
-		return in.PublicKey
-	}
-	return PublicKey
 }
 
 func (in *Installer) client() *http.Client {

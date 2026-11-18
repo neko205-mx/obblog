@@ -2,13 +2,9 @@ package updater
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,33 +14,25 @@ import (
 	"testing"
 )
 
-// fixture publishes one fake binary with valid signatures so each test can
+// fixture publishes one fake binary with a matching checksum so each test can
 // break exactly one thing.
 type fixture struct {
 	server  *httptest.Server
 	release *Release
 	dir     string
-	pub     ed25519.PublicKey
 }
 
 func newFixture(t *testing.T, mutate func(*fixture)) *fixture {
 	t.Helper()
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// A real ELF file so the architecture check passes on amd64/arm64.
 	binary := fakeELF(t)
 	sum := sha256.Sum256(binary)
 	sums := []byte(hex.EncodeToString(sum[:]) + "  " + AssetName() + "\n")
-	signature := ed25519.Sign(priv, sums)
 
-	f := &fixture{dir: t.TempDir(), pub: pub}
+	f := &fixture{dir: t.TempDir()}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/binary", func(w http.ResponseWriter, r *http.Request) { w.Write(binary) })
 	mux.HandleFunc("/sums", func(w http.ResponseWriter, r *http.Request) { w.Write(sums) })
-	mux.HandleFunc("/sig", func(w http.ResponseWriter, r *http.Request) { w.Write(signature) })
 	f.server = httptest.NewServer(mux)
 	t.Cleanup(f.server.Close)
 
@@ -53,7 +41,6 @@ func newFixture(t *testing.T, mutate func(*fixture)) *fixture {
 		BinaryURL:    f.server.URL + "/binary",
 		BinaryName:   AssetName(),
 		ChecksumsURL: f.server.URL + "/sums",
-		SignatureURL: f.server.URL + "/sig",
 	}
 	if mutate != nil {
 		mutate(f)
@@ -62,11 +49,7 @@ func newFixture(t *testing.T, mutate func(*fixture)) *fixture {
 }
 
 func (f *fixture) installer() *Installer {
-	return &Installer{
-		Dir:       f.dir,
-		Client:    f.server.Client(),
-		PublicKey: base64.StdEncoding.EncodeToString(f.pub),
-	}
+	return &Installer{Dir: f.dir, Client: f.server.Client()}
 }
 
 // fakeELF builds a minimal ELF header for the host architecture. The verifier
@@ -119,65 +102,32 @@ func TestInstallStagesVerifiedBinary(t *testing.T) {
 	}
 }
 
-// A tampered checksum file must be rejected before any binary is written.
-func TestInstallRejectsBadSignature(t *testing.T) {
-	f := newFixture(t, nil)
-	// Replace the checksum body after signing, so the signature no longer
-	// matches what is served.
-	f.release.ChecksumsURL = f.server.URL + "/sums-tampered"
-	mux := http.NewServeMux()
-	mux.HandleFunc("/sums-tampered", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(strings.Repeat("0", 64) + "  " + AssetName() + "\n"))
-	})
-	tampered := httptest.NewServer(mux)
-	t.Cleanup(tampered.Close)
-	f.release.ChecksumsURL = tampered.URL + "/sums-tampered"
-	f.release.SignatureURL = f.server.URL + "/sig"
-
-	if _, err := f.installer().Install(context.Background(), f.release); err == nil {
-		t.Fatal("tampered checksums must be rejected")
-	}
-	entries, _ := os.ReadDir(f.dir)
-	if len(entries) != 0 {
-		t.Error("nothing should be staged after a failed verification")
-	}
-}
-
-// A binary that does not match the signed digest must be rejected even when the
-// signature over the checksum file is valid.
+// A binary that does not match the published digest must be rejected and
+// nothing may be staged.
 func TestInstallRejectsChecksumMismatch(t *testing.T) {
 	f := newFixture(t, nil)
-	// Serve a different binary than the one the checksum describes.
-	f.release.BinaryURL = f.server.URL + "/binary-other"
-	mux := http.NewServeMux()
-	mux.HandleFunc("/binary-other", func(w http.ResponseWriter, r *http.Request) {
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("not the signed content"))
-	})
-	other := httptest.NewServer(mux)
+	}))
 	t.Cleanup(other.Close)
-	f.release.BinaryURL = other.URL + "/binary-other"
+	f.release.BinaryURL = other.URL + "/binary"
 
 	if _, err := f.installer().Install(context.Background(), f.release); err == nil {
 		t.Fatal("checksum mismatch must be rejected")
+	} else if !strings.Contains(err.Error(), "校验和") {
+		t.Errorf("error should mention the checksum: %v", err)
 	}
 	if _, statErr := os.Stat(filepath.Join(f.dir, "obblog")); statErr == nil {
 		t.Error("a mismatched binary must never be staged")
 	}
 }
 
-// An empty key disables installation rather than silently skipping checks.
-func TestInstallRequiresPublicKey(t *testing.T) {
+// A release missing its checksum file cannot be verified at all.
+func TestInstallRequiresChecksums(t *testing.T) {
 	f := newFixture(t, nil)
-	installer := f.installer()
-	installer.PublicKey = ""
-	original := PublicKey
-	PublicKey = ""
-	defer func() { PublicKey = original }()
-
-	if _, err := installer.Install(context.Background(), f.release); err == nil {
-		t.Fatal("install must fail without a signing key")
-	} else if !strings.Contains(err.Error(), "公钥") {
-		t.Errorf("error should mention the missing key: %v", err)
+	f.release.ChecksumsURL = ""
+	if _, err := f.installer().Install(context.Background(), f.release); err == nil {
+		t.Fatal("a release without checksums must be rejected")
 	}
 }
 
@@ -202,15 +152,9 @@ func TestInstallRejectsWrongArchitecture(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	sums := []byte(hex.EncodeToString(sum[:]) + "  " + AssetName() + "\n")
-	signature := ed25519.Sign(priv, sums)
-	mux.HandleFunc("/sig", func(w http.ResponseWriter, r *http.Request) { w.Write(signature) })
-
 	f.release.BinaryURL = srv.URL + "/b"
 	f.release.ChecksumsURL = srv.URL + "/s"
-	f.release.SignatureURL = srv.URL + "/sig"
-	installer := &Installer{Dir: f.dir, Client: srv.Client(), PublicKey: base64.StdEncoding.EncodeToString(pub)}
+	installer := &Installer{Dir: f.dir, Client: srv.Client()}
 
 	if _, err := installer.Install(context.Background(), f.release); err == nil {
 		t.Fatal("wrong architecture must be rejected")
@@ -223,19 +167,17 @@ func TestInstallRejectsNonELF(t *testing.T) {
 	f := newFixture(t, nil)
 	junk := []byte("#!/bin/sh\necho hi\n")
 	sum := sha256.Sum256(junk)
-	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	sums := []byte(hex.EncodeToString(sum[:]) + "  " + AssetName() + "\n")
-	signature := ed25519.Sign(priv, sums)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/j", func(w http.ResponseWriter, r *http.Request) { w.Write(junk) })
-	mux.HandleFunc("/s", func(w http.ResponseWriter, r *http.Request) { w.Write(sums) })
-	mux.HandleFunc("/sig", func(w http.ResponseWriter, r *http.Request) { w.Write(signature) })
+	mux.HandleFunc("/s", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(hex.EncodeToString(sum[:]) + "  " + AssetName() + "\n"))
+	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	installer := &Installer{Dir: f.dir, Client: srv.Client(), PublicKey: base64.StdEncoding.EncodeToString(pub)}
-	release := &Release{Tag: "v2.0.0", BinaryURL: srv.URL + "/j", BinaryName: AssetName(), ChecksumsURL: srv.URL + "/s", SignatureURL: srv.URL + "/sig"}
+	installer := &Installer{Dir: f.dir, Client: srv.Client()}
+	release := &Release{Tag: "v2.0.0", BinaryURL: srv.URL + "/j", BinaryName: AssetName(), ChecksumsURL: srv.URL + "/s"}
 	if _, err := installer.Install(context.Background(), release); err == nil {
 		t.Fatal("a script must not be accepted as a binary")
 	}
@@ -257,47 +199,7 @@ func TestExpectedSumParsesVariants(t *testing.T) {
 	if _, err := expectedSum(sums, "missing"); err == nil {
 		t.Error("missing entry must error")
 	}
-}
-
-func TestParsePublicKeyAcceptsFormats(t *testing.T) {
-	pub, _, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b64 := base64.StdEncoding.EncodeToString(pub)
-	if _, err := parsePublicKey(b64); err != nil {
-		t.Errorf("base64 key rejected: %v", err)
-	}
-	if _, err := parsePublicKey(""); err == nil {
-		t.Error("empty key must error")
-	}
-	if _, err := parsePublicKey("not-base64!!"); err == nil {
-		t.Error("garbage key must error")
-	}
-	if _, err := parsePublicKey(base64.StdEncoding.EncodeToString([]byte("short"))); err == nil {
-		t.Error("short key must error")
-	}
-}
-
-func TestVerifyRejectsWrongSignature(t *testing.T) {
-	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	message := []byte("payload")
-	good := ed25519.Sign(priv, message)
-	if !Verify(pub, message, good) {
-		t.Fatal("valid signature rejected")
-	}
-	if Verify(pub, []byte("other"), good) {
-		t.Error("signature must not verify a different message")
-	}
-	otherPub, _, _ := ed25519.GenerateKey(rand.Reader)
-	if Verify(otherPub, message, good) {
-		t.Error("signature must not verify under another key")
-	}
-}
-
-func TestAssetName(t *testing.T) {
-	want := fmt.Sprintf("obblog-%s-%s", runtime.GOOS, runtime.GOARCH)
-	if AssetName() != want {
-		t.Errorf("AssetName() = %s, want %s", AssetName(), want)
+	if _, err := expectedSum([]byte("short  name\n"), "name"); err == nil {
+		t.Error("malformed digest must error")
 	}
 }

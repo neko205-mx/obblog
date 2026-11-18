@@ -78,41 +78,9 @@ jobs:
           sha256sum obblog-linux-* > SHA256SUMS
           cat SHA256SUMS
 
-      # The updater refuses any release whose SHA256SUMS is not signed with the
-      # key baked into the binary, so this step is not optional. Ed25519 is used
-      # because Go's standard library verifies it without extra dependencies.
-      - name: Sign checksums
-        env:
-          SIGNING_KEY: ${{ secrets.OBBLOG_SIGNING_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -z "${SIGNING_KEY:-}" ]; then
-            echo "::error::OBBLOG_SIGNING_KEY secret is not set"
-            exit 1
-          fi
-          printf '%s' "$SIGNING_KEY" > /tmp/signing.pem
-          chmod 600 /tmp/signing.pem
-          openssl pkeyutl -sign -inkey /tmp/signing.pem -rawin \
-            -in dist/SHA256SUMS -out dist/SHA256SUMS.sig
-          rm -f /tmp/signing.pem
-          # A detached Ed25519 signature is always 64 bytes; anything else means
-          # the wrong key type was stored.
-          test "$(stat -c%s dist/SHA256SUMS.sig)" = 64 || {
-            echo "::error::signature is not 64 bytes; is the key Ed25519?"
-            exit 1
-          }
-
-      - name: Verify signature round-trips
-        env:
-          PUBLIC_KEY: ${{ vars.OBBLOG_SIGNING_PUBKEY }}
-        run: |
-          set -euo pipefail
-          printf '%s' "$PUBLIC_KEY" > /tmp/signing.pub
-          # Extract the raw public key from the PEM so pkeyutl accepts it.
-          openssl pkey -pubin -in /tmp/signing.pub -out /tmp/signing.der.pub
-          openssl pkeyutl -verify -pubin -inkey /tmp/signing.der.pub -rawin \
-            -in dist/SHA256SUMS -sigfile dist/SHA256SUMS.sig
-
+      # No signature: the update channel is trusted by configuration, so the
+      # checksum only guards against a corrupted or truncated download. Keep the
+      # release repository under your own control.
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
@@ -124,4 +92,3 @@ jobs:
             dist/obblog-linux-amd64
             dist/obblog-linux-arm64
             dist/SHA256SUMS
-            dist/SHA256SUMS.sig

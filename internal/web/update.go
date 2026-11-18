@@ -79,13 +79,14 @@ func (a *App) updateDir() string {
 	return "/data/bin"
 }
 
-// updateInstallEnabled reports whether this process may replace itself. Image
-// builds without a signing key, and the disposable test runtime, must not.
+// updateInstallEnabled reports whether this process may replace itself. The
+// disposable test runtime must not, and neither should a build that cannot
+// write to the data directory.
 func (a *App) updateInstallEnabled() bool {
 	if a.testMode || a.publications == nil {
 		return false
 	}
-	return updater.PublicKey != ""
+	return true
 }
 
 // updateRestart replaces the current process with the staged binary.

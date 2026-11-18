@@ -138,6 +138,12 @@ func (a *App) saveBlogSettings(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// updateStatus reports whether GitHub publishes a newer build. It only checks;
+// installing is deliberately a separate, explicit action.
+func (a *App) updateStatus(w http.ResponseWriter, r *http.Request) {
+	respond(w, a.updates.Status(r.Context()))
+}
+
 // preferences returns or updates the panel switches. Unknown or locked keys are
 // rejected, so the server stays the authority on what can be configured.
 func (a *App) preferences(w http.ResponseWriter, r *http.Request) {

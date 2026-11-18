@@ -143,10 +143,12 @@ internal/markdown/         Goldmark 渲染及 Obsidian 双链扩展
 internal/graph/            只读关系索引、节点和有向边聚合
 internal/gitsync/          远端校验、快进拉取、提交推送
 internal/publication/      发布记录、正文与附件副本、固定文章 ID、博客外观与独立页面
+internal/updater/          GitHub Release 版本检查
+internal/version/          构建版本号、解析与比较
 internal/web/              Web 安装/设置、后台鉴权、私有 API 与内嵌前端
 Dockerfile, compose.yaml   VPS 部署面板构建与持久卷
 demo-vault/                示例笔记和附件
-docs/                     兼容研究和验证说明
+docs/                     兼容研究、更新机制和验证说明
 tests/                    图谱和编辑器客户端模型测试
 ```
 

@@ -22,7 +22,9 @@ import (
 	"obblog/internal/graph"
 	"obblog/internal/markdown"
 	"obblog/internal/publication"
+	"obblog/internal/updater"
 	"obblog/internal/vault"
+	"obblog/internal/version"
 )
 
 //go:embed static/*
@@ -36,6 +38,7 @@ type App struct {
 	auth         authentication
 	git          *gitsync.Service
 	publications *publication.Store
+	updates      *updater.Checker
 	opMu         sync.RWMutex
 }
 
@@ -66,7 +69,7 @@ func NewWithOptions(dir string, options Options) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &App{vault: v, writable: options.Writable, managed: options.Managed, auth: authentication{password: sha256.Sum256([]byte(options.Password)), passwordHash: options.PasswordHash, secure: options.SecureCookie, sessions: make(map[[32]byte]time.Time)}}
+	a := &App{vault: v, writable: options.Writable, managed: options.Managed, updates: updater.NewChecker(""), auth: authentication{password: sha256.Sum256([]byte(options.Password)), passwordHash: options.PasswordHash, secure: options.SecureCookie, sessions: make(map[[32]byte]time.Time)}}
 	if options.AutoGit && options.Git {
 		options.Git, err = gitsync.IsRepositoryRoot(v.Path)
 		if err != nil {
@@ -121,6 +124,8 @@ func (a *App) Handler() http.Handler {
 	private.HandleFunc("POST /api/publications/refresh", a.refreshPublications)
 	private.HandleFunc("GET /api/blog", a.blogSettings)
 	private.HandleFunc("POST /api/blog", a.blogSettings)
+	private.HandleFunc("GET /api/version", func(w http.ResponseWriter, r *http.Request) { respond(w, version.Current()) })
+	private.HandleFunc("GET /api/update", a.updateStatus)
 	private.HandleFunc("GET /api/preferences", a.preferences)
 	private.HandleFunc("POST /api/preferences", a.preferences)
 	// Strip only the admin prefix; no private route is registered at the public root.

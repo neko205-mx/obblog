@@ -962,6 +962,7 @@ function showPanelSection(name) {
   for (const section of panelSections) section.hidden = section.dataset.panelSection !== name;
   if (name === "appearance" || name === "blog") loadBlog();
   if (name === "general") loadPreferences();
+  if (name === "tools") loadVersion();
 }
 for (const tab of panelTabs) tab.onclick = () => showPanelSection(tab.dataset.panelTab);
 
@@ -1090,6 +1091,64 @@ function applyDocumentTheme(mode) {
   const link = document.querySelector('link[data-theme-sheet]');
   if (link) { const fresh = link.cloneNode(); fresh.href = "/theme.css?t=" + Date.now(); link.replaceWith(fresh); }
 }
+
+// --- Version and update check ------------------------------------------------
+let versionBusy = false;
+let versionChecked = false;
+
+function renderVersion(current) {
+  $("#version-current").textContent = current.version === "dev"
+    ? "开发版本"
+    : `${current.version}${current.commit && current.commit !== "unknown" ? ` (${current.commit.slice(0, 7)})` : ""}`;
+}
+
+// loadVersion fills the current build immediately, then checks GitHub once per
+// panel session so opening the panel does not hammer the API.
+async function loadVersion() {
+  if (versionChecked) return;
+  versionChecked = true;
+  try {
+    renderVersion(await api("/admin/api/version"));
+  } catch { /* The panel still works without version data. */ }
+}
+
+async function checkForUpdate() {
+  if (versionBusy) return;
+  versionBusy = true;
+  $("#version-check").disabled = true;
+  $("#version-state").textContent = "检查中…";
+  $("#version-message").textContent = "";
+  try {
+    const status = await api("/admin/api/update");
+    renderVersion(status.current);
+    $("#version-latest").textContent = status.latest || "—";
+    const link = $("#version-link");
+    link.hidden = !status.url;
+    if (status.url) link.href = status.url;
+    if (status.available) {
+      $("#version-state").textContent = "有新版本";
+      $("#version-message").textContent = "新版本尚未安装；自动安装需要签名密钥，当前仅供查看。";
+      if (status.notes) {
+        $("#version-notes").textContent = status.notes;
+        $("#version-notes-wrap").hidden = false;
+      }
+    } else if (status.error) {
+      $("#version-state").textContent = "检查失败";
+      $("#version-message").textContent = status.error;
+    } else {
+      $("#version-state").textContent = "已是最新";
+      $("#version-message").textContent = "";
+    }
+  } catch (error) {
+    $("#version-state").textContent = "检查失败";
+    $("#version-message").textContent = error.message;
+  } finally {
+    versionBusy = false;
+    $("#version-check").disabled = false;
+  }
+}
+
+$("#version-check").onclick = checkForUpdate;
 
 $("#panel-button").onclick = async () => {
   if (editor.busy || gitBusy) return;

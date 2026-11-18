@@ -1,0 +1,114 @@
+name: release
+
+# Publishing is tag-driven: pushing v1.2.3 builds the binaries, signs the
+# checksums and attaches everything to a GitHub Release. The in-app updater
+# only ever reads from that release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build (e.g. v1.2.3)
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: "1.25.0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - goarch: amd64
+          - goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # The suite runs once per matrix entry on purpose: a broken arm64 build
+      # is otherwise only discovered by a user, not by CI.
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" go build -trimpath \
+            -ldflags "-s -w \
+              -X 'obblog/internal/version.Version=${TAG}' \
+              -X 'obblog/internal/version.Commit=${GITHUB_SHA}' \
+              -X 'obblog/internal/version.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" \
+            -o "obblog-linux-${GOARCH}" .
+          ls -l "obblog-linux-${GOARCH}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-linux-${{ matrix.goarch }}
+          path: obblog-linux-${{ matrix.goarch }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum obblog-linux-* > SHA256SUMS
+          cat SHA256SUMS
+
+      # The updater refuses any release whose SHA256SUMS is not signed with the
+      # key baked into the binary, so this step is not optional.
+      - name: Sign checksums
+        env:
+          SIGNING_KEY: ${{ secrets.OBBLOG_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SIGNING_KEY:-}" ]; then
+            echo "::error::OBBLOG_SIGNING_KEY secret is not set"
+            exit 1
+          fi
+          printf '%s' "$SIGNING_KEY" > /tmp/signing.key
+          chmod 600 /tmp/signing.key
+          # minisign detached signature over SHA256SUMS
+          minisign -S -s /tmp/signing.key -m dist/SHA256SUMS -x dist/SHA256SUMS.sig
+          rm -f /tmp/signing.key
+
+      - name: Verify signature round-trips
+        run: |
+          set -euo pipefail
+          minisign -Vm dist/SHA256SUMS -x dist/SHA256SUMS.sig -P "${{ vars.OBBLOG_SIGNING_PUBKEY }}"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/obblog-linux-amd64
+            dist/obblog-linux-arm64
+            dist/SHA256SUMS
+            dist/SHA256SUMS.sig

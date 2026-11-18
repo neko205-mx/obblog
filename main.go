@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"obblog/internal/version"
 	"obblog/internal/web"
 )
 
@@ -30,7 +31,12 @@ func main() {
 	flag.BoolVar(&options.SecureCookie, "secure-cookie", false, "Legacy vault mode: force secure cookies (HTTPS is detected automatically)")
 	flag.BoolVar(&options.Test, "test", false, "Use a disposable test installation and remove all its data on shutdown")
 	probe := flag.String("probe", "", "Probe the running server at this URL and exit; used by container health checks")
+	showVersion := flag.Bool("version", false, "Print the build version and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version.String())
+		return
+	}
 	if *probe != "" {
 		if err := probeServer(*probe); err != nil {
 			log.Print(err)

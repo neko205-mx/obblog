@@ -493,3 +493,19 @@ html[data-theme="light"] .panel-dialog { color-scheme: light; }
 .panel-dialog .theme-options label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .panel-dialog .theme-options span { white-space: nowrap; }
 @media (max-width: 560px) { .accent-swatches { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); } .theme-options { grid-template-columns: 1fr; } }
+
+/* --- Version and update check ---------------------------------------------- */
+.panel-dialog .version-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 26px 0 12px; padding-top: 22px; border-top: 1px solid var(--line); }
+.panel-dialog .version-heading h4 { margin: 0; font-size: 13px; font-weight: 550; color: var(--heading); }
+.panel-dialog .version-info { display: grid; grid-template-columns: auto 1fr; gap: 7px 16px; margin: 0; font-size: 12px; }
+.panel-dialog .version-info dt { color: var(--muted); }
+.panel-dialog .version-info dd { margin: 0; font-family: var(--mono); font-size: 11px; color: var(--heading); overflow-wrap: anywhere; }
+.panel-dialog .version-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+.panel-dialog .version-actions button { background: transparent; border: 1px solid var(--border); border-radius: 5px; color: inherit; padding: 8px 13px; font: inherit; font-size: 12px; }
+.panel-dialog .version-actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--heading); }
+.panel-dialog .version-actions a { color: var(--accent); font-size: 11px; text-underline-offset: 4px; }
+.panel-dialog .version-message { margin: 10px 0 0; font-size: 11px; line-height: 1.8; color: var(--muted); }
+.panel-dialog .version-message:empty { display: none; }
+.panel-dialog .version-notes { margin-top: 14px; border: 1px solid var(--border); border-radius: 5px; padding: 10px 12px; }
+.panel-dialog .version-notes summary { cursor: pointer; font-size: 11px; color: var(--muted); }
+.panel-dialog .version-notes pre { margin: 10px 0 0; max-height: 220px; overflow: auto; font: 11px/1.7 var(--mono); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }

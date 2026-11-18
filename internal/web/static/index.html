@@ -132,6 +132,24 @@
       <button type="button" id="panel-logout">退出登录</button>
     </div>
     <p class="field-note">Git 同步、发布与账号设置集中在这里，不占用编辑区。</p>
+
+    <div class="section-heading version-heading">
+      <h4>版本</h4>
+      <span id="version-state" class="mode-badge"></span>
+    </div>
+    <dl class="version-info">
+      <dt>当前版本</dt><dd id="version-current">—</dd>
+      <dt>最新版本</dt><dd id="version-latest">—</dd>
+    </dl>
+    <div class="version-actions">
+      <button type="button" id="version-check">检查更新</button>
+      <a id="version-link" href="#" target="_blank" rel="noopener" hidden>查看发布说明 ↗</a>
+    </div>
+    <p id="version-message" class="version-message" role="status" aria-live="polite"></p>
+    <details id="version-notes-wrap" class="version-notes" hidden>
+      <summary>更新内容</summary>
+      <pre id="version-notes"></pre>
+    </details>
   </section>
 
   <section class="panel-section" data-panel-section="appearance" role="tabpanel" aria-label="外观" hidden>

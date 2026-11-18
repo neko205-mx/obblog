@@ -99,7 +99,10 @@ func RenderWithOptions(raw []byte, from string, snapshot *vault.Snapshot, option
 	source = maskComments(source)
 	r := &noteRenderer{from: from, snapshot: snapshot, options: options}
 	md := newMarkdown(
-		goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(r, 100))),
+		goldmark.WithRendererOptions(renderer.WithNodeRenderers(
+			util.Prioritized(r, 100),
+			util.Prioritized(&mathRenderer{}, 200),
+		)),
 	)
 	doc := md.Parser().Parse(text.NewReader(source))
 	result := &Result{Properties: properties, Headings: []Heading{}}
@@ -168,7 +171,16 @@ func RenderWithOptions(raw []byte, from string, snapshot *vault.Snapshot, option
 func newMarkdown(options ...goldmark.Option) goldmark.Markdown {
 	defaults := []goldmark.Option{
 		goldmark.WithExtensions(extension.GFM, extension.Footnote, extension.Typographer),
-		goldmark.WithParserOptions(parser.WithInlineParsers(util.Prioritized(&wikiParser{}, 150))),
+		goldmark.WithParserOptions(
+			// Math runs before the wiki parser so a $ inside a formula cannot be
+			// mistaken for a link delimiter, and with high priority so $$ wins
+			// over the inline form.
+			parser.WithBlockParsers(util.Prioritized(&mathBlockParser{}, 50)),
+			parser.WithInlineParsers(
+				util.Prioritized(&mathParser{}, 100),
+				util.Prioritized(&wikiParser{}, 150),
+			),
+		),
 	}
 	return goldmark.New(append(defaults, options...)...)
 }

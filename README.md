@@ -87,6 +87,7 @@ Git 子进程有超时，不弹交互密码框；应用命令禁用本地 hooks�
 - Obsidian 风格三栏布局：文件树、标签页阅读区、文章大纲；支持浅色/深色主题、移动端目录抽屉。
 - 按文件名和路径搜索，`Ctrl+K` / `Cmd+K` 聚焦搜索，回车打开第一条结果，Esc 清空搜索。
 - Markdown 标题、列表、表格、任务列表、引用、代码块、脚注和基础 Callout。
+- 数学公式：行内 `$...$` 与块级 `$$...$$`，服务端转 MathML，无需 CDN 或前端脚本。详见 [数学公式](docs/math.md)。
 - `[[笔记]]`、`[[目录/笔记|别名]]`、`[[笔记#章节]]`、`[[#本页章节]]`，以及普通 Markdown 相对链接。
 - `![[图片.png]]`、`![[图片.png|宽度]]` 和普通 Markdown 图片；PDF、音视频附件可点击打开，播放能力取决于浏览器。
 - 原始 Markdown 只读查看，YAML frontmatter 折叠展示。
@@ -124,7 +125,7 @@ Git 子进程有超时，不弹交互密码框；应用命令禁用本地 hooks�
 
 ## 兼容边界
 
-这不是完整 Obsidian Web 复刻：编辑器是轻量 Markdown 源码编辑，不是 Obsidian Live Preview 或富文本编辑器。不提供 Canvas、Bases、插件运行环境、数学公式或 Mermaid 渲染。代码块作为代码显示，未进行语法高亮。
+这不是完整 Obsidian Web 复刻：编辑器是轻量 Markdown 源码编辑，不是 Obsidian Live Preview 或富文本编辑器。不提供 Canvas、Bases、插件运行环境或 Mermaid 渲染。代码块作为代码显示，未进行语法高亮。
 
 `![[笔记]]` 暂时显示为可点击链接，不展开正文，但参与关系索引；块引用 `#^block-id` 参与文件级关系索引，暂不支持阅读定位。Callout 只支持基础展示，不实现折叠语义。属性在阅读区原样展示，图谱解析 YAML 中的双链和标签。无效 YAML 会产生索引提示，正文仍索引。文件名与路径大小写敏感。
 
@@ -140,6 +141,7 @@ internal/account/          加盐密码摘要与验证
 internal/config/           持久配置、排他安装与原子替换
 internal/vault/            目录扫描、文件读写、版本校验、链接解析
 internal/markdown/         Goldmark 渲染及 Obsidian 双链扩展
+internal/math/             LaTeX 到 MathML 转换
 internal/graph/            只读关系索引、节点和有向边聚合
 internal/gitsync/          远端校验、快进拉取、提交推送
 internal/publication/      发布记录、正文与附件副本、固定文章 ID、博客外观与独立页面

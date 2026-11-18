@@ -86,3 +86,14 @@ a:hover { color: var(--accent-ui); }
   .post-dates { gap: 8px 18px; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .article-row { animation: none; } }
+
+/* --- Math (MathML from the server) ----------------------------------------- */
+.article-body math { font-family: var(--serif); }
+.article-body math[display="block"] { display: block; margin: 0 auto; font-size: 1.05em; }
+.article-body .math-block { overflow-x: auto; overflow-y: hidden; padding: 14px 0; margin: 18px 0; }
+.article-body code.math-error {
+  display: inline-block; padding: 1px 5px; border-radius: 3px;
+  background: color-mix(in srgb, #c9574f 14%, transparent);
+  color: #c9574f; font-family: var(--mono); font-size: .9em;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}

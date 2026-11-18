@@ -509,3 +509,16 @@ html[data-theme="light"] .panel-dialog { color-scheme: light; }
 .panel-dialog .version-notes { margin-top: 14px; border: 1px solid var(--border); border-radius: 5px; padding: 10px 12px; }
 .panel-dialog .version-notes summary { cursor: pointer; font-size: 11px; color: var(--muted); }
 .panel-dialog .version-notes pre { margin: 10px 0 0; max-height: 220px; overflow: auto; font: 11px/1.7 var(--mono); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* --- Math (MathML from the server) ----------------------------------------- */
+/* Native MathML needs no script; only spacing and colour are adjusted so a
+   formula sits in the surrounding prose instead of looking pasted in. */
+.markdown-body math, .article-body math { font-family: var(--serif); color: var(--text); }
+.markdown-body math[display="block"], .article-body math[display="block"] { display: block; margin: 0 auto; font-size: 1.05em; }
+.markdown-body .math-block, .article-body .math-block { overflow-x: auto; overflow-y: hidden; padding: 14px 0; margin: 18px 0; }
+.markdown-body code.math-error, .article-body code.math-error {
+  display: inline-block; padding: 1px 5px; border-radius: 3px;
+  background: color-mix(in srgb, #c9574f 14%, transparent);
+  color: #c9574f; font-family: var(--mono); font-size: .9em;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}

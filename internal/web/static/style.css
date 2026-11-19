@@ -197,11 +197,12 @@ kbd { white-space: nowrap; font: 9px var(--mono); color: var(--faint); border: 1
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .editor-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--bg); }
-/* One compact row: path, live status, then actions. The reading toolbar above
-   already shows the vault breadcrumb, so the editor does not repeat it. */
-.editor-toolbar { display: flex; align-items: center; gap: 14px; min-height: 46px; padding: 0 18px; border-bottom: 1px solid var(--border); }
-.editor-path-label { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; color: var(--faint); }
-.editor-path-label svg { width: 13px; height: 13px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
+/* Editing reuses the existing document toolbar: vault / editable note path,
+   live status and actions fit on one row above the source and preview panes. */
+.document-toolbar.editing { min-height: 48px; gap: 9px; }
+.document-toolbar.editing .breadcrumbs { flex: 0 1 auto; max-width: 150px; }
+.editor-path-label { display: flex; align-items: center; gap: 7px; flex: 1 1 210px; min-width: 0; color: var(--faint); }
+.editor-path-label > span { flex-shrink: 0; }
 .editor-path-label input { background: transparent; color: var(--heading); font: 11px var(--mono); min-width: 0; width: 100%; padding: 4px 0; border: 0; border-bottom: 1px solid transparent; outline-offset: 2px; text-overflow: ellipsis; }
 .editor-path-label input:not([readonly]) { border-bottom-color: var(--border); }
 .editor-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; font-size: 9px; color: var(--faint); }
@@ -209,7 +210,7 @@ kbd { white-space: nowrap; font: 9px var(--mono); color: var(--faint); border: 1
 .editor-actions button, .editor-conflict button, .dialog-actions button { padding: 7px 12px; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); font-size: 11px; background: var(--surface); }
 .editor-actions button:hover, .editor-conflict button:hover, .dialog-actions button:hover { background: var(--hover); color: var(--heading); }
 .editor-actions .save-button, .dialog-actions .save-button { background: var(--accent-bg); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
-#editor-status { color: var(--accent); white-space: nowrap; }
+#editor-status { color: var(--accent); white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
 #editor-status[data-state="error"] { color: #c68f77; }
 #editor-character-count { white-space: nowrap; opacity: .8; }
 .editor-columns { display: flex; flex: 1; min-height: 0; }
@@ -348,7 +349,8 @@ kbd { white-space: nowrap; font: 9px var(--mono); color: var(--faint); border: 1
   .empty-state { padding-top: 65px; }
   .empty-state h1 { font-size: 25px; }
   .toast { bottom: 38px; font-size: 11px; }
-  .editor-toolbar { min-height: 42px; padding: 0 11px; gap: 8px; }
+  .document-toolbar.editing { min-height: 44px; gap: 5px; padding: 0 9px; }
+  .document-toolbar.editing .breadcrumbs { max-width: 75px; }
   .editor-path-label input { font-size: 10px; }
   .editor-meta { font-size: 8px; gap: 6px; }
   .editor-meta #editor-character-count { display: none; }
@@ -381,6 +383,15 @@ kbd { white-space: nowrap; font: 9px var(--mono); color: var(--faint); border: 1
   .graph-zoom span { min-width: 29px; font-size: 8px; }
   .graph-selection { top: 55px; left: 12px; max-width: calc(100% - 24px); padding: 9px 12px; }
   .graph-message { left: 10%; right: 10%; top: 46%; font-size: 11px; }
+}
+@media (max-width: 580px) {
+  /* On phones, put the path and actions on two compact lines rather than
+     clipping the save button; wider screens keep everything on one line. */
+  .document-toolbar.editing { flex-wrap: wrap; align-content: center; min-height: 70px; padding: 4px 9px; }
+  .document-toolbar.editing .breadcrumbs { flex: 0 0 auto; }
+  .document-toolbar.editing .editor-path-label { flex: 1 1 calc(100% - 90px); }
+  .document-toolbar.editing .editor-meta { flex: 1 1 auto; }
+  .document-toolbar.editing .editor-actions { margin-left: auto; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; transition: none !important; } }
 /* Private administration uses the same workbench palette as the reader. */

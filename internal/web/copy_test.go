@@ -42,45 +42,55 @@ func TestUIOmitsBoilerplateCopy(t *testing.T) {
 	}
 }
 
-// TestEditorChromeIsSingleRow keeps the editor header from growing back into
-// three stacked bands. The reading toolbar above already names the vault, so
-// the editor row carries the path, status and actions together.
-func TestEditorChromeIsSingleRow(t *testing.T) {
+// TestEditorControlsReuseDocumentToolbar ensures editing uses the existing
+// notes breadcrumb row instead of adding another band above the source pane.
+func TestEditorControlsReuseDocumentToolbar(t *testing.T) {
 	html, err := assets.ReadFile("static/index.html")
 	if err != nil {
 		t.Fatal(err)
 	}
 	page := string(html)
-
-	start := strings.Index(page, `id="editor-view"`)
+	start := strings.Index(page, `<header class="document-toolbar">`)
 	if start < 0 {
-		t.Fatal("editor view missing")
+		t.Fatal("document toolbar missing")
 	}
-	end := strings.Index(page, `id="graph-view"`)
-	if end < start {
-		t.Fatal("graph view must follow the editor")
+	end := strings.Index(page[start:], `</header>`)
+	if end < 0 {
+		t.Fatal("document toolbar is unclosed")
 	}
-	editor := page[start:end]
-
-	// The separate status band and its redundant label are gone.
-	// The visible label above the input is gone; the accessibility label on the
-	// input itself stays, so only the standalone text is checked.
-	for _, gone := range []string{`class="editor-info"`, `>文件路径<`, `<kbd>Ctrl / ⌘ S</kbd>`} {
-		if strings.Contains(editor, gone) {
-			t.Errorf("editor should not render %q", gone)
+	toolbar := page[start : start+end]
+	for _, want := range []string{`id="breadcrumbs"`, `id="editor-path-control"`, `id="editor-path"`, `id="editor-meta"`, `id="editor-status"`, `id="editor-character-count"`, `id="editor-actions"`, `id="editor-preview-toggle"`, `id="save-note"`, `id="close-editor"`} {
+		if !strings.Contains(toolbar, want) {
+			t.Errorf("shared document toolbar missing %q", want)
 		}
 	}
-	// Everything the editor needs is inside the single toolbar.
-	for _, want := range []string{`class="editor-toolbar"`, `id="editor-path"`, `id="editor-status"`, `id="editor-character-count"`, `id="save-note"`, `id="close-editor"`} {
-		if !strings.Contains(editor, want) {
-			t.Errorf("editor toolbar missing %q", want)
+	// Paths still have an accessible label and remain editable for new notes.
+	if !strings.Contains(toolbar, `aria-label="编辑文件路径"`) {
+		t.Error("path input has no accessible name")
+	}
+	editorStart := strings.Index(page, `id="editor-view"`)
+	editorEnd := strings.Index(page, `id="graph-view"`)
+	if editorStart < 0 || editorEnd < editorStart {
+		t.Fatal("editor view missing")
+	}
+	editor := page[editorStart:editorEnd]
+	for _, gone := range []string{`class="editor-toolbar"`, `class="editor-info"`, `id="editor-path"`, `id="save-note"`, `<kbd>Ctrl / ⌘ S</kbd>`} {
+		if strings.Contains(editor, gone) {
+			t.Errorf("editor pane must not add a second row containing %q", gone)
 		}
 	}
 	css, err := assets.ReadFile("static/style.css")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(css), ".editor-info {") {
-		t.Error("editor-info styles must be removed with the element")
+	if strings.Contains(string(css), ".editor-toolbar {") || strings.Contains(string(css), ".editor-info {") {
+		t.Error("removed editor rows should not retain CSS rules")
+	}
+	js, err := assets.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(js), "setEditorControls(true)") || strings.Count(string(js), "setEditorControls(false)") < 2 {
+		t.Error("editor controls must be shown when editing and hidden when reading or showing graph")
 	}
 }

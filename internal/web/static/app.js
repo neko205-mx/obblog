@@ -214,8 +214,14 @@ async function closeTab(path) {
   }
 }
 
+function setEditorControls(visible) {
+  $(".document-toolbar").classList.toggle("editing", visible);
+  for (const id of ["editor-path-control", "editor-meta", "editor-actions"]) $(`#${id}`).hidden = !visible;
+}
+
 function showReading() {
   state.view = "note";
+  setEditorControls(false);
   graphView.hide();
   $("#graph-view").hidden = true;
   $("#editor-view").hidden = true;
@@ -287,14 +293,14 @@ async function startEditor(note, isNew = false) {
   $("#graph-view").hidden = true;
   $(".document-layout").hidden = true;
   $("#editor-view").hidden = false;
+  setEditorControls(true);
   $(".view-switch").hidden = true;
   $("#outline-toggle").hidden = true;
   $("#local-graph-button").hidden = true;
   $("#edit-button").hidden = true;
   $("#graph-button").classList.remove("selected");
   $("#files-button").classList.add("selected");
-  // The reading toolbar only needs to identify the vault here: the editor row
-  // directly below already carries the full path and the actions.
+  // The path input completes this breadcrumb on the same toolbar.
   $("#breadcrumbs").textContent = state.vault.name;
   history.replaceState(null, "", noteURL(note.path));
   editor.open(note, isNew);
@@ -330,6 +336,7 @@ async function showGraph(local = false, recordHistory = true) {
   if (!await leaveEditor()) return;
   state.request++;
   state.view = "graph";
+  setEditorControls(false);
   $("#panel-publish").disabled = true;
   state.graphTab = true;
   $("#graph-view").hidden = false;

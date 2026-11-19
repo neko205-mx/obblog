@@ -124,6 +124,7 @@ export class NoteEditor {
     for (const button of document.querySelectorAll("[data-format]")) button.disabled = offline || this.busy;
     const label = this.uploading ? "正在上传图片…" : offline ? "离线，编辑已暂停" : message || this.warning || (this.draft.dirty ? "未保存" : this.synced ? "已保存并推送" : "已载入");
     $("editor-status").textContent = label;
+    $("editor-status").title = label;
     $("editor-status").dataset.state = offline ? "error" : kind;
     $("editor-character-count").textContent = `${this.draft.text.split("\n").length} 行 · ${this.draft.text.length.toLocaleString()} 字符`;
     this.onChange?.();

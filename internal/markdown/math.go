@@ -62,6 +62,11 @@ func (*mathParser) Parse(parent ast.Node, reader text.Reader, pc parser.Context)
 			i++ // skip the escaped character
 			continue
 		}
+		// A backtick starts an inline code span. Never pair an opening dollar
+		// in prose with a dollar inside code (e.g. price $6; use `$x$`).
+		if line[i] == '`' {
+			return nil
+		}
 		if line[i] != '$' {
 			continue
 		}

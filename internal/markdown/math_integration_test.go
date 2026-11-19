@@ -78,6 +78,18 @@ func TestMathDoesNotEatCurrency(t *testing.T) {
 	}
 }
 
+func TestMathDoesNotPairCurrencyWithInlineCode(t *testing.T) {
+	html := renderSource(t, "Price $5 and $6; code `$x^2$`.")
+	if strings.Contains(html, "<math") || strings.Contains(html, "math-error") {
+		t.Fatalf("currency paired with dollar inside code: %s", html)
+	}
+	for _, expected := range []string{"$5", "$6", "<code>$x^2$</code>"} {
+		if !strings.Contains(html, expected) {
+			t.Errorf("missing %q: %s", expected, html)
+		}
+	}
+}
+
 func TestMathIgnoresUnclosedDelimiter(t *testing.T) {
 	html := renderSource(t, "An unclosed $formula stays text.")
 	if strings.Contains(html, "<math") {

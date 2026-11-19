@@ -113,7 +113,7 @@ kbd { white-space: nowrap; font: 9px var(--mono); color: var(--faint); border: 1
 .view-switch .active { background: var(--raised); color: var(--accent); }
 .outline-toggle { margin-left: 3px; transform: rotate(180deg); }
 .document-layout { display: flex; min-height: 0; flex: 1; }
-.document-scroll { min-width: 0; flex: 1; overflow: auto; scroll-behavior: smooth; scrollbar-gutter: stable; background: radial-gradient(ellipse at 45% 0, color-mix(in srgb, var(--accent) 2%, transparent), transparent 55%); }
+.document-scroll { min-width: 0; flex: 1; overflow: auto; scroll-behavior: smooth; scrollbar-gutter: stable; }
 .document-container { max-width: 850px; margin: 0 auto; padding: 48px clamp(28px, 5vw, 88px) 40px; animation: page-enter .25s ease-out; }
 .document-topline { display: flex; align-items: center; justify-content: space-between; margin-bottom: 27px; gap: 10px; }
 .eyebrow { font: 8px/1.6 var(--mono); letter-spacing: 1.7px; color: var(--faint); }
@@ -215,7 +215,7 @@ kbd { white-space: nowrap; font: 9px var(--mono); color: var(--faint); border: 1
 #editor-character-count { white-space: nowrap; opacity: .8; }
 .editor-columns { display: flex; flex: 1; min-height: 0; }
 .editor-code-pane, .editor-preview-pane { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; }
-.editor-preview-pane { border-left: 1px solid var(--border); background: radial-gradient(ellipse at 20% 0, color-mix(in srgb, var(--accent) 3%, transparent), transparent 60%); }
+.editor-preview-pane { border-left: 1px solid var(--border); background: var(--bg); }
 .editor-pane-heading { height: 40px; min-height: 40px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; gap: 10px; border-bottom: 1px solid var(--line); }
 .editor-pane-heading > span { color: var(--faint); font: 8px var(--mono); letter-spacing: 1.3px; }
 .editor-pane-heading > div { display: flex; gap: 5px; }

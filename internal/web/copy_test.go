@@ -94,3 +94,26 @@ func TestEditorControlsReuseDocumentToolbar(t *testing.T) {
 		t.Error("editor controls must be shown when editing and hidden when reading or showing graph")
 	}
 }
+
+// TestAdminHasNoDecorativeRadialGradients guards against faint accent glows on
+// the reading and preview surfaces. A 2-3% accent ellipse over the dark
+// background renders as a visible halo ring rather than a subtle tint.
+func TestAdminHasNoDecorativeRadialGradients(t *testing.T) {
+	css, err := assets.ReadFile("static/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule := func(selector string) string {
+		start := strings.Index(string(css), selector+" {")
+		if start < 0 {
+			return ""
+		}
+		end := strings.Index(string(css)[start:], "}")
+		return string(css)[start : start+end]
+	}
+	for _, selector := range []string{".document-scroll", ".editor-preview-pane"} {
+		if body := rule(selector); strings.Contains(body, "gradient") {
+			t.Errorf("%s must not paint a gradient: %s", selector, body)
+		}
+	}
+}

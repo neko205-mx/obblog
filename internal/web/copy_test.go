@@ -41,3 +41,46 @@ func TestUIOmitsBoilerplateCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestEditorChromeIsSingleRow keeps the editor header from growing back into
+// three stacked bands. The reading toolbar above already names the vault, so
+// the editor row carries the path, status and actions together.
+func TestEditorChromeIsSingleRow(t *testing.T) {
+	html, err := assets.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+
+	start := strings.Index(page, `id="editor-view"`)
+	if start < 0 {
+		t.Fatal("editor view missing")
+	}
+	end := strings.Index(page, `id="graph-view"`)
+	if end < start {
+		t.Fatal("graph view must follow the editor")
+	}
+	editor := page[start:end]
+
+	// The separate status band and its redundant label are gone.
+	// The visible label above the input is gone; the accessibility label on the
+	// input itself stays, so only the standalone text is checked.
+	for _, gone := range []string{`class="editor-info"`, `>文件路径<`, `<kbd>Ctrl / ⌘ S</kbd>`} {
+		if strings.Contains(editor, gone) {
+			t.Errorf("editor should not render %q", gone)
+		}
+	}
+	// Everything the editor needs is inside the single toolbar.
+	for _, want := range []string{`class="editor-toolbar"`, `id="editor-path"`, `id="editor-status"`, `id="editor-character-count"`, `id="save-note"`, `id="close-editor"`} {
+		if !strings.Contains(editor, want) {
+			t.Errorf("editor toolbar missing %q", want)
+		}
+	}
+	css, err := assets.ReadFile("static/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(css), ".editor-info {") {
+		t.Error("editor-info styles must be removed with the element")
+	}
+}

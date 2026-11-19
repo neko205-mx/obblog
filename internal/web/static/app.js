@@ -293,7 +293,9 @@ async function startEditor(note, isNew = false) {
   $("#edit-button").hidden = true;
   $("#graph-button").classList.remove("selected");
   $("#files-button").classList.add("selected");
-  $("#breadcrumbs").textContent = `${state.vault.name} / ${note.path}`;
+  // The reading toolbar only needs to identify the vault here: the editor row
+  // directly below already carries the full path and the actions.
+  $("#breadcrumbs").textContent = state.vault.name;
   history.replaceState(null, "", noteURL(note.path));
   editor.open(note, isNew);
   reveal(note.path);

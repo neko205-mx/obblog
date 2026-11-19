@@ -197,18 +197,21 @@ kbd { white-space: nowrap; font: 9px var(--mono); color: var(--faint); border: 1
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .editor-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--bg); }
-.editor-toolbar { display: flex; gap: 18px; align-items: center; justify-content: space-between; padding: 17px 22px; border-bottom: 1px solid var(--border); }
-.editor-path-label { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 5px; font-size: 9px; color: var(--faint); }
-.editor-path-label input { background: transparent; color: var(--heading); font: 12px var(--mono); min-width: 0; width: 100%; padding: 5px 0; border: 0; border-bottom: 1px solid transparent; outline-offset: 2px; }
+/* One compact row: path, live status, then actions. The reading toolbar above
+   already shows the vault breadcrumb, so the editor does not repeat it. */
+.editor-toolbar { display: flex; align-items: center; gap: 14px; min-height: 46px; padding: 0 18px; border-bottom: 1px solid var(--border); }
+.editor-path-label { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; color: var(--faint); }
+.editor-path-label svg { width: 13px; height: 13px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
+.editor-path-label input { background: transparent; color: var(--heading); font: 11px var(--mono); min-width: 0; width: 100%; padding: 4px 0; border: 0; border-bottom: 1px solid transparent; outline-offset: 2px; text-overflow: ellipsis; }
 .editor-path-label input:not([readonly]) { border-bottom-color: var(--border); }
-.editor-actions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+.editor-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; font-size: 9px; color: var(--faint); }
+.editor-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
 .editor-actions button, .editor-conflict button, .dialog-actions button { padding: 7px 12px; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); font-size: 11px; background: var(--surface); }
 .editor-actions button:hover, .editor-conflict button:hover, .dialog-actions button:hover { background: var(--hover); color: var(--heading); }
 .editor-actions .save-button, .dialog-actions .save-button { background: var(--accent-bg); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
-.editor-info { display: flex; gap: 13px; justify-content: space-between; align-items: center; min-height: 35px; padding: 6px 22px; background: var(--sidebar); border-bottom: 1px solid var(--line); color: var(--faint); font-size: 9px; }
-#editor-status { color: var(--accent); flex: 1; }
+#editor-status { color: var(--accent); white-space: nowrap; }
 #editor-status[data-state="error"] { color: #c68f77; }
-#editor-character-count { white-space: nowrap; }
+#editor-character-count { white-space: nowrap; opacity: .8; }
 .editor-columns { display: flex; flex: 1; min-height: 0; }
 .editor-code-pane, .editor-preview-pane { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .editor-preview-pane { border-left: 1px solid var(--border); background: radial-gradient(ellipse at 20% 0, color-mix(in srgb, var(--accent) 3%, transparent), transparent 60%); }
@@ -345,14 +348,12 @@ kbd { white-space: nowrap; font: 9px var(--mono); color: var(--faint); border: 1
   .empty-state { padding-top: 65px; }
   .empty-state h1 { font-size: 25px; }
   .toast { bottom: 38px; font-size: 11px; }
-  .editor-toolbar { padding: 10px 13px; gap: 8px; flex-wrap: wrap; }
-  .editor-path-label { flex-basis: 100%; }
+  .editor-toolbar { min-height: 42px; padding: 0 11px; gap: 8px; }
   .editor-path-label input { font-size: 10px; }
-  .editor-actions { width: 100%; justify-content: flex-end; gap: 5px; }
+  .editor-meta { font-size: 8px; gap: 6px; }
+  .editor-meta #editor-character-count { display: none; }
+  .editor-actions { gap: 4px; }
   .editor-actions button { font-size: 9px; padding: 5px 8px; }
-  .editor-info { padding: 6px 13px; gap: 5px; font-size: 8px; }
-  .editor-info kbd { display: none; }
-  #editor-character-count { font-size: 7px; }
   #editor-lines { width: 35px; min-width: 35px; padding-right: 8px; font-size: 10px; }
   #note-editor { font-size: 11px; padding-left: 12px; }
   #editor-preview { padding: 20px; }

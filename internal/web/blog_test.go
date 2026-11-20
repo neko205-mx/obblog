@@ -353,9 +353,7 @@ func TestPreferencesRequireAuthentication(t *testing.T) {
 	}
 }
 
-// TestThemeCssDerivesPaletteFromAccent guards the rule that a saved accent
-// repaints every surface. Regressions here are silent: the panel updates but
-// the pages keep their old colors.
+// TestThemeCssDerivesPaletteFromAccent checks the public theme tokens.
 func TestThemeCssDerivesPaletteFromAccent(t *testing.T) {
 	for _, accent := range []string{"#2f6f8f", "#a0403f"} {
 		blog := *publication.DefaultBlog()
@@ -390,14 +388,39 @@ func TestNoSurfaceShipsItsOwnPalette(t *testing.T) {
 	}
 }
 
-// TestEveryPageLinksTheSharedTheme makes sure the solved problem cannot come
-// back: each HTML surface must load the generated stylesheet.
-func TestEveryPageLinksTheSharedTheme(t *testing.T) {
+func TestBlogPaletteChangesLeaveAdminUnchanged(t *testing.T) {
+	a, _, _ := publishFixture(t)
+	h := testHandler(t, a)
+	paths := []string{"/admin/", "/admin/login", "/admin/settings", "/admin/palette.css"}
+	before := make(map[string]string, len(paths))
+	for _, path := range paths {
+		w := editRequest(h, "GET", path, nil)
+		if w.Code != 200 {
+			t.Fatalf("%s: %d", path, w.Code)
+		}
+		before[path] = w.Body.String()
+	}
+	meta := a.publications.Metadata()
+	meta.Theme, meta.Accent = "dark", "#a0403f"
+	if w := editRequest(h, "POST", "/admin/api/blog", meta); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	for _, path := range paths {
+		if w := editRequest(h, "GET", path, nil); w.Code != 200 || w.Body.String() != before[path] {
+			t.Errorf("changing the public blog palette altered %s", path)
+		}
+	}
+	if !strings.Contains(publicGet(a, "/").Body.String(), `data-theme="dark"`) || !strings.Contains(publicGet(a, "/theme.css").Body.String(), meta.Accent) {
+		t.Fatal("public blog did not apply its own palette")
+	}
+}
+
+func TestAdminAndPublicPagesUseSeparatePalettes(t *testing.T) {
 	pages := map[string]string{
-		"index.html":    "/theme.css",
-		"login.html":    "/theme.css",
-		"settings.html": "/theme.css",
-		"install.html":  "/install/theme.css",
+		"index.html":    "/admin/palette.css",
+		"login.html":    "/admin/palette.css",
+		"settings.html": "/admin/palette.css",
+		"install.html":  "/install/palette.css",
 		"public.html":   "/theme.css",
 	}
 	for name, want := range pages {
@@ -407,6 +430,9 @@ func TestEveryPageLinksTheSharedTheme(t *testing.T) {
 		}
 		if !strings.Contains(string(data), want) {
 			t.Errorf("%s must link %s", name, want)
+		}
+		if name != "public.html" && (strings.Contains(string(data), `/theme.css`) || strings.Contains(string(data), `data-theme=`)) {
+			t.Errorf("%s must not inherit the public blog theme", name)
 		}
 	}
 }

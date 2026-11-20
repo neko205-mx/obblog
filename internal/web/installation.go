@@ -146,19 +146,8 @@ func (rt *Runtime) serve(w http.ResponseWriter, r *http.Request) {
 		(&App{}).static(w, r, "install.html")
 		return
 	}
-	// The installer has no App yet, so the palette comes from whatever the data
-	// directory already holds, falling back to defaults.
-	if r.URL.Path == "/install/theme.css" && r.Method == "GET" {
-		rt.mu.RLock()
-		blog := publication.DefaultBlog()
-		if rt.app != nil && rt.app.publications != nil {
-			blog = rt.app.publications.Blog()
-		} else if rt.settings != nil {
-			blog = publication.DefaultBlog()
-		}
-		rt.mu.RUnlock()
-		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		w.Write(themeStylesheet(blog))
+	if r.URL.Path == "/install/palette.css" && r.Method == "GET" {
+		(&App{}).static(w, r, "admin-palette.css")
 		return
 	}
 	for _, asset := range []string{"install.js", "install.css", "entry.css"} {

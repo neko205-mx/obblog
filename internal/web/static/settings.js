@@ -265,7 +265,7 @@ function loadSiteSettings() {
     renderAppearance();
     if ($("editor-view").hidden) $("blog-form").hidden = false;
     setSiteBusy(false);
-    $("appearance-state").textContent = "全站生效";
+    $("appearance-state").textContent = "公开博客";
   }).catch((error) => {
     alertAt("appearance-error", error.message);
     blogError(error.message);
@@ -282,10 +282,7 @@ async function saveAppearance() {
   $("appearance-state").textContent = "保存中…";
   try {
     blogConfig = await request("/admin/api/blog", { method: "POST", body });
-    if (blogConfig.theme === "auto") delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = blogConfig.theme;
-    $("theme-sheet").href = `/theme.css?t=${Date.now()}`;
-    $("appearance-state").textContent = "已保存 · 全站生效";
+    $("appearance-state").textContent = "已保存 · 公开博客";
   } catch (error) {
     // Roll back only the appearance controls, not a draft on the blog tab.
     renderAppearance();

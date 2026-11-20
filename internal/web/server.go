@@ -166,7 +166,6 @@ func (a *App) Handler() http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		// Delegate so the {{THEME}} placeholder is substituted consistently.
 		a.static(w, r, name)
 	})
 	a.publicRoutes(mux)
@@ -175,6 +174,9 @@ func (a *App) Handler() http.Handler {
 
 // The same authenticated page serves both the workbench and setup recovery.
 func (a *App) settingsRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /admin/palette.css", func(w http.ResponseWriter, r *http.Request) {
+		a.static(w, r, "admin-palette.css")
+	})
 	mux.Handle("GET /admin/settings", a.gate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		a.static(w, r, "settings.html")
 	})))
@@ -210,40 +212,15 @@ func protect(next http.Handler) http.Handler {
 	})
 }
 
-// static serves an embedded asset. HTML pages carry a {{THEME}} placeholder so
-// the saved light/dark choice applies before first paint; keeping the swap here
-// means every screen shares one injection point.
+// static serves an embedded asset.
 func (a *App) static(w http.ResponseWriter, r *http.Request, name string) {
 	data, err := assets.ReadFile("static/" + name)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	if path.Ext(name) == ".html" {
-		// Omit the attribute entirely for "auto" so the stylesheet's
-		// prefers-color-scheme branch decides; an empty value is not valid.
-		attr := a.themeAttr()
-		replacement := ""
-		if attr != "" {
-			replacement = ` data-theme="` + attr + `"`
-		}
-		data = []byte(strings.ReplaceAll(string(data), ` data-theme="{{THEME}}"`, replacement))
-	}
 	w.Header().Set("Content-Type", mime.TypeByExtension(path.Ext(name)))
 	w.Write(data)
-}
-
-// themeAttr resolves "auto" to an empty attribute so the stylesheet's
-// prefers-color-scheme branch decides.
-func (a *App) themeAttr() string {
-	if a.publications == nil {
-		return ""
-	}
-	blog := a.publications.Blog()
-	if blog == nil || blog.Theme == "auto" || blog.Theme == "" {
-		return ""
-	}
-	return blog.Theme
 }
 
 func (a *App) gitStatus(w http.ResponseWriter, r *http.Request) {

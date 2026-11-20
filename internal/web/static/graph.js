@@ -79,8 +79,7 @@ export class GraphView {
     });
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.stage);
-    this.themeObserver = new MutationObserver(() => this.scheduleDraw());
-    this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => this.scheduleDraw());
     if (window.matchMedia("(max-width: 760px)").matches) this.$("settings").open = false;
   }
 
@@ -347,7 +346,9 @@ export class GraphView {
     const accent = css.getPropertyValue("--accent").trim();
     const muted = css.getPropertyValue("--muted").trim();
     const text = css.getPropertyValue("--text").trim();
-    const palette = [accent, "#ab9870", "#7ea3b7", "#bc8c7d", "#91a56c", "#b5a58b", "#719d99"];
+    const tag = css.getPropertyValue("--graph-tag").trim();
+    const asset = css.getPropertyValue("--graph-asset").trim();
+    const palette = [accent, muted, tag, asset];
     const active = this.hovered || this.selected;
     const neighborhood = active ? this.neighbors.get(active.id) : null;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -380,8 +381,8 @@ export class GraphView {
         color = palette[hash % palette.length];
       }
       if (node.kind === "unresolved") color = muted;
-      else if (node.kind === "tag") color = "#bb9d68";
-      else if (node.kind === "asset") color = "#7f9fb2";
+      else if (node.kind === "tag") color = tag;
+      else if (node.kind === "asset") color = asset;
       const radius = this.radius(node);
       ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 1.1 / Math.sqrt(t.k);
       ctx.beginPath(); ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);

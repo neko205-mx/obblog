@@ -7,18 +7,13 @@ import (
 	"obblog/internal/publication"
 )
 
-// fontVariables is shared by every page. They live in theme.css because the
-// per-page sheets only reference the stacks; a missing definition invalidates
-// the whole `font:` shorthand that uses it.
+// fontVariables defines the public blog font stacks.
 const fontVariables = `  --serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", Georgia, serif;
   --sans: "LXGW WenKai", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   --mono: "JetBrains Mono", "Cascadia Code", "Noto Sans Mono", Consolas, monospace;
 `
 
-// themeCSS renders the shared palette. Every page — the admin workspace, the
-// login and installer screens, the settings page and the public blog — links
-// this one stylesheet, so the accent and light/dark choice saved in the panel
-// apply everywhere instead of each surface keeping its own fixed colors.
+// themeCSS renders the public blog palette. The admin uses a static palette.
 //
 // The values are emitted as plain CSS custom properties. Accent input is
 // restricted to the fixed palette by publication.SetBlog, so nothing here can
@@ -56,7 +51,7 @@ func themeCSS(blog *publication.Blog) string {
 }
 
 type themePalette struct {
-	// Workspace surfaces (admin, login, installer, settings).
+	// General-purpose tokens available to public themes.
 	bg, surface, sidebar, rail, raised, hover, border, line string
 	text, heading, muted, faint, accent, accentBg, code     string
 	// Public article surfaces reuse the same accent.
@@ -152,7 +147,7 @@ func themeVars(accent string, dark bool) themePalette {
 	}
 }
 
-// themeStylesheet is served at /theme.css and linked by every page. Caching is
+// themeStylesheet is served at /theme.css for the public blog. Caching is
 // disabled for all responses, so the file always reflects the current setting.
 func themeStylesheet(blog *publication.Blog) []byte {
 	return []byte(themeCSS(blog))

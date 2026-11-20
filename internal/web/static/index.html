@@ -73,6 +73,11 @@
         <div class="editor-preview-pane"><div class="editor-pane-heading"><span>预览</span><small id="editor-preview-state">实时预览</small></div><article class="markdown-body" id="editor-preview" aria-label="编辑内容预览"></article></div>
       </div>
     </section>
+    <section class="attachment-preview" id="attachment-preview" aria-labelledby="attachment-title" hidden>
+      <header class="attachment-heading"><button type="button" class="icon-button" aria-label="关闭附件预览" title="关闭预览（Esc）"><svg><use href="#i-close"/></svg></button><h2 id="attachment-title"></h2><a download hidden>下载</a></header>
+      <div class="attachment-body"></div>
+      <p class="attachment-status" role="status"></p>
+    </section>
     <section class="graph-view" id="graph-view" aria-label="笔记关系图谱" hidden>
       <header class="graph-header"><div><h1>关系图谱<span id="graph-count" aria-live="polite">读取中</span></h1><p id="graph-scope" hidden></p></div><div class="graph-scope-switch" role="group" aria-label="图谱范围"><button id="graph-global" class="active" aria-pressed="true">全库</button><button id="graph-local" aria-pressed="false">当前笔记</button></div></header>
       <div class="graph-stage" id="graph-stage">

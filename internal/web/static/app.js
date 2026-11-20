@@ -1,11 +1,14 @@
 import { GraphView } from "./graph.js";
 import { NoteEditor } from "./editor.js";
+import { AttachmentPreview, prepareInlineImages } from "./attachments.mjs";
 
 const $ = (selector) => document.querySelector(selector);
 const state = { vault: null, tabs: [], current: null, note: null, source: false, expanded: new Set(), request: 0, view: "note", graphTab: false };
 let toastTimer;
+const attachment = new AttachmentPreview($("#attachment-preview"));
 const graphView = new GraphView({
   openNote: (path) => openNote(path),
+  openAttachment: (path, source) => openAttachment(path, source),
   notify: (message) => toast(message),
   scopeChanged: (local) => history.replaceState(null, "", graphLocation(local)),
 });
@@ -27,6 +30,7 @@ const editor = new NoteEditor({
     applySnapshot(await api("/admin/api/vault"));
   },
   onClose: () => exitEditor(),
+  onPreview: (root) => prepareInlineImages(root, location.href),
   onUploaded: async (saved) => {
     if (state.note && saved.gitHead) state.note.gitHead = saved.gitHead;
     graphView.invalidate();
@@ -36,6 +40,8 @@ const editor = new NoteEditor({
   notes: () => state.vault?.notes || [],
   gitMode: () => state.vault?.saveMode === "git",
 });
+attachment.bind($("#document-container"));
+attachment.bind($("#editor-preview"));
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -68,13 +74,17 @@ async function api(url, options = {}) {
 }
 
 function displayName(path) { return path.split("/").pop().replace(/\.md$/i, ""); }
-function assetURL(path) { return `/admin/api/asset?${new URLSearchParams({ path })}`; }
 function noteURL(path, fragment = "") { return `/admin/?${new URLSearchParams({ note: path })}${fragment}`; }
 
 function setPane(open) {
   document.body.classList.toggle("pane-open", open);
   document.body.classList.toggle("pane-hidden", !open);
   $("#pane-toggle").setAttribute("aria-expanded", String(open));
+}
+
+function openAttachment(path, source) {
+  if (window.matchMedia("(max-width: 760px)").matches) setPane(false);
+  attachment.openPath(path, source);
 }
 
 function reveal(path) {
@@ -127,7 +137,7 @@ function renderTree() {
       } else {
         button.append(el("span", "tree-indent"), icon(entry.kind === "note" ? "file" : "image"), el("span", "tree-name", entry.kind === "note" ? displayName(entry.name) : entry.name));
         if (entry.kind === "note") button.onclick = () => openNote(entry.path);
-        else button.onclick = () => window.open(assetURL(entry.path), "_blank", "noopener,noreferrer");
+        else button.onclick = () => openAttachment(entry.path, button);
         item.append(button);
       }
       parent.append(item);
@@ -219,6 +229,7 @@ function setEditorControls(visible) {
 }
 
 function showReading() {
+  attachment.close(false);
   state.view = "note";
   setEditorControls(false);
   graphView.hide();
@@ -269,6 +280,7 @@ async function exitEditor() {
 }
 
 async function startEditor(note, isNew = false) {
+  attachment.close(false);
   if (state.vault.saveMode === "git") {
     try {
       const git = await api("/admin/api/git");
@@ -326,6 +338,7 @@ function graphLocation(local) {
 
 async function showGraph(local = false, recordHistory = true) {
   if (!await leaveEditor()) return;
+  attachment.close(false);
   state.request++;
   state.view = "graph";
   setEditorControls(false);
@@ -383,9 +396,10 @@ function renderDocument() {
     // HTML comes exclusively from the server's safe-mode Markdown renderer.
     article.innerHTML = note.html;
     if (!article.querySelector("h1")) article.prepend(el("h1", "", note.title));
+    prepareInlineImages(article, location.href);
     article.querySelectorAll('a[href]').forEach((link) => {
       const url = new URL(link.getAttribute("href"), location.href);
-      if (url.origin !== location.origin || url.pathname === "/admin/api/asset") {
+      if (url.origin !== location.origin) {
         link.target = "_blank";
         link.rel = "noopener noreferrer";
       }
@@ -518,6 +532,7 @@ async function loadVault(initial = false) {
 }
 
 $("#document-container").addEventListener("click", (event) => {
+  if (event.defaultPrevented) return;
   const link = event.target.closest("a[href]");
   if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
   const url = new URL(link.getAttribute("href"), location.href);
@@ -591,6 +606,11 @@ window.addEventListener("popstate", async () => {
   else { state.request++; state.current = null; state.note = null; showEmpty(); renderTree(); renderTabs(); }
 });
 document.addEventListener("keydown", (event) => {
+  if (attachment.visible && event.key === "Escape") {
+    event.preventDefault();
+    attachment.close();
+    return;
+  }
   if (editor.active && !event.defaultPrevented && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
     event.preventDefault(); editor.save(); return;
   }

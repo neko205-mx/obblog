@@ -95,6 +95,18 @@ kbd { white-space: nowrap; font: 9px var(--mono); color: var(--faint); border: 1
 .view-switch .active { background: var(--raised); color: var(--accent); }
 .outline-toggle { margin-left: 3px; transform: rotate(180deg); }
 .document-layout { display: flex; min-height: 0; flex: 1; }
+.workspace.showing-attachment > :is(.document-layout, .editor-view, .graph-view) { display: none; }
+.attachment-preview { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); }
+.attachment-heading { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 5px 14px; border-bottom: 1px solid var(--border); }
+.attachment-heading h2 { flex: 1; min-width: 0; margin: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-heading a { font-size: 12px; }
+.attachment-body { display: grid; place-items: center; flex: 1; min-height: 0; overflow: auto; }
+.attachment-body :is(img, video) { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.attachment-body iframe { display: block; width: 100%; height: 100%; border: 0; }
+.attachment-body audio { max-width: calc(100% - 24px); }
+.attachment-status { margin: 0; padding: 8px 14px; border-top: 1px solid var(--line); color: var(--muted); }
+.attachment-status:empty { display: none; }
+.markdown-body img[data-attachment-preview] { cursor: zoom-in; }
 .document-scroll { min-width: 0; flex: 1; overflow: auto; scroll-behavior: smooth; scrollbar-gutter: stable; }
 .document-container { max-width: 820px; margin: 0 auto; padding: 32px clamp(20px, 4vw, 48px) 48px; }
 .document-topline { display: flex; align-items: center; justify-content: space-between; margin-bottom: 27px; gap: 10px; }

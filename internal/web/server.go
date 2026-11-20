@@ -162,7 +162,7 @@ func (a *App) Handler() http.Handler {
 		if name == "" {
 			name = "index.html"
 		}
-		if name != "index.html" && name != "app.js" && name != "style.css" && name != "graph.js" && name != "graph-model.mjs" && name != "force.js" {
+		if name != "index.html" && name != "app.js" && name != "style.css" && name != "graph.js" && name != "graph-model.mjs" && name != "attachments.mjs" && name != "force.js" {
 			http.NotFound(w, r)
 			return
 		}

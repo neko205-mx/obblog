@@ -14,8 +14,8 @@ async function jsonRequest(url, options) {
 }
 
 export class NoteEditor {
-  constructor({ onChange, onSaved, onUploaded, onClose, notify, notes, gitMode, page }) {
-    Object.assign(this, { onChange, onSaved, onUploaded, onClose, notify, notes, gitMode, page });
+  constructor({ onChange, onSaved, onUploaded, onClose, onPreview, notify, notes, gitMode, page }) {
+    Object.assign(this, { onChange, onSaved, onUploaded, onClose, onPreview, notify, notes, gitMode, page });
     this.active = false;
     this.saving = false;
     this.uploading = false;
@@ -71,7 +71,7 @@ export class NoteEditor {
       catch { this.textarea.focus(); this.textarea.select(); this.notify("复制失败，请手动复制已选中的草稿"); }
     };
     $("editor-preview").addEventListener("click", (event) => {
-      if (event.target.closest("a")) { event.preventDefault(); this.notify("退出编辑后可打开链接"); }
+      if (!event.defaultPrevented && event.target.closest("a")) { event.preventDefault(); this.notify("退出编辑后可打开链接"); }
     });
     window.addEventListener("beforeunload", (event) => {
       if (!page && (this.dirty || this.busy)) { event.preventDefault(); event.returnValue = ""; }
@@ -180,6 +180,7 @@ export class NoteEditor {
         properties.textContent = result.properties;
         $("editor-preview").prepend(properties);
       }
+      this.onPreview?.($("editor-preview"));
       $("editor-preview-state").textContent = "实时预览";
     } catch (error) {
       if (error.name === "AbortError" || id !== this.previewID) return;

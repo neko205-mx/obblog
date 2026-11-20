@@ -2,8 +2,9 @@ import { forceSimulation, forceManyBody, forceLink, forceX, forceY, forceCollide
 import { selectGraph, nodeRadius } from "./graph-model.mjs";
 
 export class GraphView {
-  constructor({ openNote, notify, scopeChanged }) {
+  constructor({ openNote, openAttachment, notify, scopeChanged }) {
     this.openNote = openNote;
+    this.openAttachment = openAttachment;
     this.notify = notify;
     this.scopeChanged = scopeChanged;
     this.root = document.querySelector("#graph-view");
@@ -309,7 +310,7 @@ export class GraphView {
       this.$("selection-path").textContent = node.path || (node.kind === "tag" ? "标签节点" : "尚未创建的笔记");
       this.$("selection-stats").textContent = `${node.incoming} 条入链 · ${node.outgoing} 条出链 · ${node.degree} 个邻居`;
       this.$("open").hidden = node.kind !== "note" && node.kind !== "asset";
-      this.$("open").textContent = node.kind === "asset" ? "打开附件 ↗" : "打开笔记 ↗";
+      this.$("open").textContent = node.kind === "asset" ? "预览附件" : "打开笔记 ↗";
       this.$("picker").value = node.id;
     } else this.$("picker").value = "";
     this.scheduleDraw();
@@ -318,7 +319,7 @@ export class GraphView {
   activate(node) {
     if (!node) return;
     if (node.kind === "note") this.openNote(node.path);
-    else if (node.kind === "asset") window.open(`/admin/api/asset?${new URLSearchParams({ path: node.path })}`, "_blank", "noopener,noreferrer");
+    else if (node.kind === "asset") this.openAttachment(node.path, document.activeElement);
     else if (node.kind === "tag") {
       this.$("search").value = node.label;
       this.options.query = node.label;

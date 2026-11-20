@@ -1,7 +1,6 @@
 package web
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -423,51 +422,12 @@ func (a *App) updatePublications(ctx context.Context) error {
 	return a.publications.Refresh(a.vault, renames, head)
 }
 
-var publicTemplates = template.Must(template.New("public").Funcs(template.FuncMap{
-	"postURL": publication.URL,
-	"pageURL": publication.PageURL,
-	"date":    func(t time.Time) string { return t.In(time.FixedZone("CST", 8*60*60)).Format("2006-01-02") },
-	"isoDate": func(t time.Time) string { return t.Format(time.RFC3339) },
-}).ParseFS(assets, "static/public.html"))
-
-// blogShell carries the configured site chrome into every public template.
-type blogShell struct {
-	*publication.Blog
-	Accent    template.CSS
-	ThemeAttr template.HTMLAttr
-}
-
-func newBlogShell(blog *publication.Blog) blogShell {
-	if blog == nil {
-		blog = publication.DefaultBlog()
-	}
-	// publication.SetBlog only accepts the fixed palette, so the value cannot
-	// break out of the custom property it is written into.
-	// "auto" leaves data-theme off so the stylesheet follows the reader's
-	// system preference; the attribute is rendered verbatim into <html ...>.
-	attr := ""
-	if blog.Theme == "light" || blog.Theme == "dark" {
-		attr = ` data-theme="` + blog.Theme + `"`
-	}
-	return blogShell{Blog: blog, Accent: template.CSS(blog.Accent), ThemeAttr: template.HTMLAttr(attr)}
-}
-
-type publicArticle struct {
-	*publication.Article
-	blogShell
-	HTML        template.HTML
-	Excerpt     string
-	Headings    []markdown.Heading
-	ShowUpdated bool
-	TitleID     string
-}
-
 // themeRoutes serves the shared palette used by every page. It is public
 // because the login and installer screens need it before a session exists.
 func (a *App) themeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /theme.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		w.Write(themeStylesheet(a.publications.Blog()))
+		w.Write(themeStylesheet(a.publicBlog()))
 	})
 }
 
@@ -477,6 +437,7 @@ func (a *App) publicRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /pages/{slug}", a.publicStandalone)
 	mux.HandleFunc("GET /media/{id}/{blob}", a.publicAsset)
 	mux.HandleFunc("GET /blog.css", func(w http.ResponseWriter, r *http.Request) { a.static(w, r, "blog.css") })
+	mux.HandleFunc("GET /theme-assets/{id}/{file...}", a.serveThemeAsset)
 	// Liveness probe for the container runtime. It touches the store so a
 	// wedged process, not just a closed listener, gets reported.
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -497,27 +458,38 @@ func (a *App) publicSnapshot() map[string]*publication.Article {
 }
 
 func (a *App) publicIndex(w http.ResponseWriter, r *http.Request) {
+	a.renderPublicIndex(w, nil)
+}
+
+func (a *App) publicBlog() *publication.Blog {
+	if a.publications == nil {
+		return publication.DefaultBlog()
+	}
+	return a.publications.Blog()
+}
+
+func (a *App) renderPublicIndex(w http.ResponseWriter, preview *publicTheme) {
 	articles := a.publicSnapshot()
-	shell := newBlogShell(a.publications.Blog())
-	list := []publicArticle{}
+	data := newThemeData(a.publicBlog())
 	for _, article := range publication.Published(articles) {
 		rendered, err := publication.Render(article, articles)
 		if err != nil {
 			fail(w, 500, "文章渲染失败")
 			return
 		}
-		list = append(list, publicArticle{Article: article, blogShell: shell, Excerpt: rendered.Excerpt})
+		data.Posts = append(data.Posts, postThemeSummary(article, rendered))
 	}
-	publicPage(w, "index", struct {
-		blogShell
-		Articles []publicArticle
-	}{shell, list})
+	a.renderThemedPage(w, "index", data, preview)
 }
 
 func (a *App) publicPost(w http.ResponseWriter, r *http.Request) {
+	a.renderPublicPost(w, r.PathValue("id"), nil)
+}
+
+func (a *App) renderPublicPost(w http.ResponseWriter, id string, preview *publicTheme) {
 	articles := a.publicSnapshot()
 	for _, article := range articles {
-		if !article.Enabled || article.ID != r.PathValue("id") {
+		if !article.Enabled || article.ID != id {
 			continue
 		}
 		rendered, err := publication.Render(article, articles)
@@ -532,22 +504,14 @@ func (a *App) publicPost(w http.ResponseWriter, r *http.Request) {
 				titleID = rendered.Headings[0].ID
 			}
 		}
-		// Only safe-mode Markdown renderer output is trusted as template HTML.
-		publicPage(w, "post", publicArticle{Article: article, blogShell: newBlogShell(a.publications.Blog()), HTML: template.HTML(body), Excerpt: rendered.Excerpt, Headings: rendered.Headings, ShowUpdated: article.Revised, TitleID: titleID})
+		data := newThemeData(a.publicBlog())
+		post := postThemeSummary(article, rendered)
+		post.TitleID = titleID
+		data.Post, data.Content, data.Headings = &post, template.HTML(body), rendered.Headings
+		a.renderThemedPage(w, "post", data, preview)
 		return
 	}
-	http.NotFound(w, r)
-}
-
-func publicPage(w http.ResponseWriter, name string, data any) {
-	var body bytes.Buffer
-	if err := publicTemplates.ExecuteTemplate(&body, name, data); err != nil {
-		log.Printf("public template: %v", err)
-		fail(w, 500, "页面渲染失败")
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(body.Bytes())
+	http.Error(w, "404 page not found", http.StatusNotFound)
 }
 
 // publicStandalone renders a page that lives with the blog configuration rather
@@ -643,20 +607,24 @@ func renderStandalone(source string, articles map[string]*publication.Article) (
 }
 
 func (a *App) publicStandalone(w http.ResponseWriter, r *http.Request) {
+	a.renderPublicStandalone(w, r.PathValue("slug"), nil)
+}
+
+func (a *App) renderPublicStandalone(w http.ResponseWriter, slug string, preview *publicTheme) {
 	if a.publications == nil {
-		http.NotFound(w, r)
+		http.Error(w, "404 page not found", http.StatusNotFound)
 		return
 	}
 	blog := a.publications.Blog()
 	var page *publication.BlogPage
 	for _, candidate := range blog.Pages {
-		if candidate.Slug == r.PathValue("slug") {
+		if candidate.Slug == slug {
 			page = candidate
 			break
 		}
 	}
 	if page == nil {
-		http.NotFound(w, r)
+		http.Error(w, "404 page not found", http.StatusNotFound)
 		return
 	}
 	rendered, err := renderStandalone(page.Source, a.publicSnapshot())
@@ -664,12 +632,10 @@ func (a *App) publicStandalone(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "页面渲染失败")
 		return
 	}
-	publicPage(w, "page", struct {
-		blogShell
-		Page     *publication.BlogPage
-		HTML     template.HTML
-		Headings []markdown.Heading
-	}{newBlogShell(blog), page, template.HTML(rendered.HTML), rendered.Headings})
+	data := newThemeData(blog)
+	data.Page = &themePage{Title: page.Title, URL: publication.PageURL(page.Slug), UpdatedAt: page.UpdatedAt}
+	data.Content, data.Headings = template.HTML(rendered.HTML), rendered.Headings
+	a.renderThemedPage(w, "page", data, preview)
 }
 
 func (a *App) publicAsset(w http.ResponseWriter, r *http.Request) {

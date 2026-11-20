@@ -53,7 +53,7 @@ func OpenRuntime(dir string) (*Runtime, error) {
 			// Keep authenticated recovery settings available if a mount or Git
 			// configuration changes, without reopening first-install access.
 			rt.problem = "知识库暂时不可用，请重新选择目录或调整 Git 设置"
-			rt.app = &App{managed: true, auth: authentication{passwordHash: c.PasswordHash, secure: c.SecureCookie, sessions: make(map[[32]byte]time.Time)}}
+			rt.app = &App{managed: true, dataDir: rt.dir, auth: authentication{passwordHash: c.PasswordHash, secure: c.SecureCookie, sessions: make(map[[32]byte]time.Time)}}
 			rt.app.publications, _ = publication.Open(rt.dir, c.Vault)
 			rt.handler = recoveryHandler(rt.app)
 		} else {

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN"{{.ThemeAttr}}>
+<head>
+  {{template "journal-head" .}}
+  <title>{{.Post.Title}} · {{.Site.Title}}</title>
+  {{with .Post.Excerpt}}<meta name="description" content="{{.}}">{{end}}
+</head>
+<body>
+  {{template "journal-header" .}}
+  <main class="journal-wrap" id="journal-content">
+    <header class="journal-heading">
+      <a class="journal-back" href="/">返回文章列表</a>
+      <h1{{with .Post.TitleID}} id="{{.}}"{{end}}>{{.Post.Title}}</h1>
+      <p class="journal-meta">
+        {{with .Site.Author}}<span>{{.}}</span>{{end}}
+        <span>发布于 <time datetime="{{isoDate .Post.PublishedAt}}">{{date .Post.PublishedAt}}</time></span>
+        {{if .Post.ShowUpdated}}<span>更新于 <time datetime="{{isoDate .Post.UpdatedAt}}">{{date .Post.UpdatedAt}}</time></span>{{end}}
+      </p>
+    </header>
+    {{template "journal-content" .}}
+  </main>
+  {{template "journal-footer" .}}
+</body>
+</html>

@@ -53,7 +53,8 @@ type BlogMetadata struct {
 // Embedding BlogMetadata preserves the flat blog object in publications.json.
 type Blog struct {
 	BlogMetadata
-	Pages []*BlogPage `json:"pages"`
+	Pages       []*BlogPage `json:"pages"`
+	PublicTheme string      `json:"publicTheme,omitempty"`
 }
 
 type diskState struct {
@@ -629,9 +630,25 @@ func (s *Store) SetBlog(b BlogMetadata) (BlogMetadata, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	next := &Blog{BlogMetadata: cleaned, Pages: s.blog.Pages}
-	if err := s.persist(s.articles, next, s.gitHead); err != nil {
+	next := *s.blog
+	next.BlogMetadata = cleaned
+	if err := s.persist(s.articles, &next, s.gitHead); err != nil {
 		return BlogMetadata{}, err
 	}
 	return cleaned, nil
+}
+
+func (s *Store) PublicTheme() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.blog.PublicTheme
+}
+
+// SetPublicTheme only changes the selected template package.
+func (s *Store) SetPublicTheme(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := *s.blog
+	next.PublicTheme = id
+	return s.persist(s.articles, &next, s.gitHead)
 }

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN"{{.ThemeAttr}}>
+<head>
+  {{template "journal-head" .}}
+  <title>{{.Page.Title}} · {{.Site.Title}}</title>
+</head>
+<body>
+  {{template "journal-header" .}}
+  <main class="journal-wrap" id="journal-content">
+    <header class="journal-heading">
+      <h1>{{.Page.Title}}</h1>
+      <p class="journal-meta"><span>更新于 <time datetime="{{isoDate .Page.UpdatedAt}}">{{date .Page.UpdatedAt}}</time></span></p>
+    </header>
+    {{template "journal-content" .}}
+  </main>
+  {{template "journal-footer" .}}
+</body>
+</html>

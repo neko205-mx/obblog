@@ -294,6 +294,86 @@ async function saveAppearance() {
   } finally { setSiteBusy(false); }
 }
 
+// Public blog templates are independent of the workbench palette above.
+const themeEndpoint = "/admin/api/themes";
+const defaultTheme = "default";
+let themeCatalog, themeLoading = false, themeSaving = false;
+
+function renderBlogThemeSelection() {
+  const select = $("blog-template-select");
+  const theme = themeCatalog?.themes.find(({ id }) => id === select.value);
+  const usable = Boolean(theme && !theme.error);
+  select.disabled = !themeCatalog?.themes.length || themeLoading || themeSaving;
+  $("blog-template-enable").disabled = !usable || themeLoading || themeSaving || theme.id === themeCatalog.active;
+  $("blog-template-enable").textContent = themeSaving ? "启用中…" : "启用主题";
+  alertAt("blog-template-description", [theme?.version, theme?.description].filter(Boolean).join(" · "));
+  for (const [kind, path] of Object.entries({ home: "/", post: themeCatalog?.previews?.post, page: themeCatalog?.previews?.page })) {
+    const link = $(`blog-template-preview-${kind}`);
+    link.hidden = !usable || !path || themeLoading || themeSaving;
+    if (link.hidden) link.removeAttribute("href");
+    else link.href = `/admin/theme-preview/${encodeURIComponent(theme.id)}?${new URLSearchParams({ path })}`;
+  }
+}
+
+function setBlogThemes(result) {
+  themeCatalog = { ...result, active: result.active || defaultTheme, effective: result.effective || defaultTheme };
+  const select = $("blog-template-select");
+  const { active, effective, themes } = themeCatalog;
+  const label = (id) => themes.find((theme) => theme.id === id)?.name || id;
+  select.replaceChildren();
+  for (const theme of themes) {
+    const state = theme.error ? "（不可用）" : theme.id === effective ? "（生效中）" : "";
+    const option = el("option", "", `${theme.name || theme.id}${state}`);
+    option.value = theme.id;
+    select.append(option);
+  }
+  select.value = themes.some(({ id }) => id === active) ? active : effective;
+  $("blog-template-status").textContent = active === effective
+    ? `当前主题：${label(effective)}`
+    : `已配置：${label(active)}；实际生效：${label(effective)}（回退）`;
+  alertAt("blog-template-error", themes.find(({ id }) => id === select.value)?.error || "");
+  $("blog-template-retry").hidden = true;
+  renderBlogThemeSelection();
+}
+
+async function loadBlogThemes() {
+  if (themeLoading || themeSaving) return;
+  themeLoading = true;
+  $("blog-template-status").textContent = "读取中…";
+  $("blog-template-retry").hidden = true;
+  alertAt("blog-template-error");
+  renderBlogThemeSelection();
+  try { setBlogThemes(await request(themeEndpoint)); }
+  catch (error) {
+    themeCatalog = null;
+    $("blog-template-select").replaceChildren();
+    $("blog-template-status").textContent = "无法读取主题";
+    alertAt("blog-template-error", error.message);
+    $("blog-template-retry").hidden = false;
+  } finally {
+    themeLoading = false;
+    renderBlogThemeSelection();
+  }
+}
+
+$("blog-template-select").onchange = () => {
+  const theme = themeCatalog?.themes.find(({ id }) => id === $("blog-template-select").value);
+  alertAt("blog-template-error", theme?.error || "");
+  renderBlogThemeSelection();
+};
+$("blog-template-retry").onclick = loadBlogThemes;
+$("blog-template-enable").onclick = async () => {
+  const id = $("blog-template-select").value;
+  const theme = themeCatalog?.themes.find((item) => item.id === id);
+  if (!theme || theme.error || themeLoading || themeSaving || id === themeCatalog.active) return;
+  themeSaving = true;
+  alertAt("blog-template-error");
+  renderBlogThemeSelection();
+  try { setBlogThemes(await request(themeEndpoint, { method: "POST", body: { id } })); }
+  catch (error) { alertAt("blog-template-error", error.message); }
+  finally { themeSaving = false; renderBlogThemeSelection(); }
+};
+
 // General preferences come from the shared server-side registry.
 let preferences, preferencesBusy = false;
 function renderPreferences(list, focusKey) {
@@ -622,6 +702,7 @@ function showTab(key) {
   }
   renderTabLinks();
   if (key === "appearance" || key === "blog") loadSiteSettings();
+  if (key === "appearance" && !themeCatalog) loadBlogThemes();
   pages.showTab(key === "blog");
   if (key === "general") loadPreferences();
   if (key === "publication") loadPublicationTab();
@@ -649,7 +730,7 @@ document.querySelector(".settings-tabs").onkeydown = (event) => {
 };
 window.addEventListener("popstate", () => { if (context) showTab(selectedTab()); });
 
-function workInProgress() { return systemBusy || siteBusy || preferencesBusy || gitBusy || publicationBusy || versionBusy || pages.busy; }
+function workInProgress() { return systemBusy || siteBusy || themeSaving || preferencesBusy || gitBusy || publicationBusy || versionBusy || pages.busy; }
 function canLeave() {
   if (workInProgress()) { alertAt("settings-notice", "正在保存或同步，请稍候"); return false; }
   return !(systemDirty || blogDirty || pages.dirty) || window.confirm("还有未保存的设置，是否放弃修改？");

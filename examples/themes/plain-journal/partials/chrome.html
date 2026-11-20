@@ -1,0 +1,41 @@
+{{define "journal-head"}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="{{asset "style.css"}}">
+{{end}}
+
+{{define "journal-header"}}
+<a class="journal-skip" href="#journal-content">跳到正文</a>
+<header class="journal-header" id="journal-top">
+  <div class="journal-wrap journal-bar">
+    <a class="journal-name" href="/">{{.Site.Title}}</a>
+    {{with .Site.Navigation}}
+    <nav class="journal-nav" aria-label="站点导航">
+      {{range .}}<a href="{{.URL}}">{{.Title}}</a>{{end}}
+    </nav>
+    {{end}}
+  </div>
+</header>
+{{end}}
+
+{{define "journal-content"}}
+<div class="journal-layout">
+  <article class="journal-content">{{.Content}}</article>
+  {{with .Headings}}
+  <aside class="journal-outline" aria-label="正文目录">
+    <details open>
+      <summary>目录</summary>
+      <ol>{{range .}}<li class="journal-level-{{.Level}}"><a href="#{{.ID}}">{{.Text}}</a></li>{{end}}</ol>
+    </details>
+  </aside>
+  {{end}}
+</div>
+{{end}}
+
+{{define "journal-footer"}}
+<footer class="journal-wrap journal-footer">
+  <span>{{if .Site.Footer}}{{.Site.Footer}}{{else}}{{.Site.Title}}{{end}}</span>
+  <a href="#journal-top">回到顶部 ↑</a>
+</footer>
+{{end}}

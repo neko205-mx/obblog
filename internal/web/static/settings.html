@@ -44,6 +44,21 @@
         <span id="blog-preview-text">预览</span>
       </div>
       <p id="appearance-error" class="settings-error" role="alert" hidden></p>
+      <section class="settings-section" aria-labelledby="blog-template-title">
+        <div class="section-heading"><h3 id="blog-template-title">博客主题</h3></div>
+        <p id="blog-template-status" role="status">读取中…</p>
+        <label for="blog-template-select">主题</label>
+        <select id="blog-template-select" aria-describedby="blog-template-description" disabled></select>
+        <p id="blog-template-description" class="field-note" hidden></p>
+        <p id="blog-template-error" class="settings-error" role="alert" hidden></p>
+        <div class="settings-actions blog-template-actions">
+          <a id="blog-template-preview-home" target="_blank" rel="noopener noreferrer" hidden>预览首页 ↗</a>
+          <a id="blog-template-preview-post" target="_blank" rel="noopener noreferrer" hidden>预览文章 ↗</a>
+          <a id="blog-template-preview-page" target="_blank" rel="noopener noreferrer" hidden>预览独立页 ↗</a>
+          <button type="button" id="blog-template-enable" class="save-button" disabled>启用主题</button>
+          <button type="button" id="blog-template-retry" hidden>重新读取</button>
+        </div>
+      </section>
     </section>
     <section class="settings-panel" id="settings-general" role="tabpanel" aria-labelledby="tab-general" hidden>
       <div class="section-heading"><h2>常规</h2><span id="prefs-state" class="mode-badge" role="status"></span></div>

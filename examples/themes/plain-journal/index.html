@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN"{{.ThemeAttr}}>
+<head>
+  {{template "journal-head" .}}
+  <title>{{.Site.Title}}</title>
+  {{with .Site.Description}}<meta name="description" content="{{.}}">{{end}}
+</head>
+<body>
+  {{template "journal-header" .}}
+  <main class="journal-wrap" id="journal-content">
+    <header class="journal-heading">
+      <h1>{{.Site.Title}}</h1>
+      {{with .Site.Description}}<p>{{.}}</p>{{end}}
+    </header>
+    <section aria-label="文章列表">
+      {{range .Posts}}
+      <article class="journal-row">
+        <time datetime="{{isoDate .PublishedAt}}">{{date .PublishedAt}}</time>
+        <div>
+          <h2><a href="{{.URL}}">{{.Title}}</a></h2>
+          {{with .Excerpt}}<p>{{.}}</p>{{end}}
+        </div>
+      </article>
+      {{else}}
+      <p class="journal-muted">暂无已发布文章。</p>
+      {{end}}
+    </section>
+  </main>
+  {{template "journal-footer" .}}
+</body>
+</html>

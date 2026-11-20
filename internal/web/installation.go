@@ -76,6 +76,7 @@ func recoveryHandler(a *App) http.Handler {
 	mux.HandleFunc("POST /admin/api/login", a.login)
 	mux.HandleFunc("POST /admin/api/logout", a.logout)
 	a.themeRoutes(mux)
+	a.settingsRoutes(mux)
 	a.publicRoutes(mux)
 	mux.HandleFunc("/admin/", func(w http.ResponseWriter, r *http.Request) {
 		if !a.authenticated(r) {
@@ -177,7 +178,7 @@ func (rt *Runtime) serve(w http.ResponseWriter, r *http.Request) {
 		rt.installAPI(w, r)
 		return
 	}
-	if r.URL.Path == "/admin/settings" || r.URL.Path == "/admin/settings.js" || r.URL.Path == "/admin/settings.css" || strings.HasPrefix(r.URL.Path, "/admin/api/settings") {
+	if r.URL.Path == "/admin/api/settings" || r.URL.Path == "/admin/api/settings/directories" {
 		rt.settingsAPI(w, r)
 		return
 	}
@@ -231,25 +232,18 @@ func (rt *Runtime) settingsAPI(w http.ResponseWriter, r *http.Request) {
 	a := rt.app
 	if a == nil || !a.authenticated(r) {
 		rt.mu.RUnlock()
-		if r.URL.Path == "/admin/settings" {
-			http.Redirect(w, r, "/admin/login", 303)
-		} else {
-			fail(w, 401, "请先登录后台")
-		}
+		fail(w, 401, "请先登录后台")
 		return
 	}
 	c := *rt.settings
 	problem := rt.problem
 	writable, gitEnabled := a.vault != nil && a.writable, a.git != nil
+	canInstallUpdate := a.vault != nil && a.updateInstallEnabled()
 	rt.mu.RUnlock()
 	switch {
-	case r.URL.Path == "/admin/settings" && r.Method == "GET":
-		a.static(w, r, "settings.html")
-	case (r.URL.Path == "/admin/settings.js" || r.URL.Path == "/admin/settings.css") && r.Method == "GET":
-		a.static(w, r, strings.TrimPrefix(r.URL.Path, "/admin/"))
 	case r.URL.Path == "/admin/api/settings" && r.Method == "GET":
 		_, err := exec.LookPath("git")
-		respond(w, map[string]any{"vault": c.Vault, "writable": writable, "git": gitEnabled, "tokenConfigured": c.Credentials.Token != "", "username": c.Credentials.Username, "gitAvailable": err == nil, "problem": problem, "testMode": rt.testMode})
+		respond(w, map[string]any{"managed": true, "vault": c.Vault, "writable": writable, "git": gitEnabled, "tokenConfigured": c.Credentials.Token != "", "username": c.Credentials.Username, "gitAvailable": err == nil, "problem": problem, "testMode": rt.testMode, "canInstallUpdate": canInstallUpdate})
 	case r.URL.Path == "/admin/api/settings" && r.Method == "POST":
 		rt.configure(w, r, false)
 	case r.URL.Path == "/admin/api/settings/directories" && r.Method == "GET":

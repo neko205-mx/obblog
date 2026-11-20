@@ -1,6 +1,5 @@
 import { GraphView } from "./graph.js";
 import { NoteEditor } from "./editor.js";
-import { MAX_PAGES, slugify, uniqueSlug, validateBlog } from "./blog-model.mjs";
 
 const $ = (selector) => document.querySelector(selector);
 const state = { vault: null, tabs: [], current: null, note: null, source: false, expanded: new Set(), request: 0, view: "note", graphTab: false };
@@ -232,18 +231,13 @@ function showReading() {
   $("#edit-button").hidden = false;
   $("#graph-button").classList.remove("selected");
   $("#files-button").classList.add("selected");
-  $("#panel-publish").disabled = !state.note;
 }
 
 function applySnapshot(snapshot) {
   state.vault = snapshot;
-  $("#panel-settings").hidden = !snapshot.managed;
-  $("#panel-end-test").hidden = !snapshot.testMode;
   $("#vault-name").textContent = snapshot.name;
   $("#vault-name").title = snapshot.name;
   $("#vault-count").textContent = `${snapshot.notes.length} 篇笔记 · ${snapshot.attachments} 个附件`;
-  $("#admin-notes-count").textContent = `${snapshot.notes.length} 篇笔记`;
-  $("#admin-assets-count").textContent = `${snapshot.attachments} 个附件`;
   $("#access-mode").textContent = snapshot.writable ? "可编辑" : "只读";
   $("#new-note-button").disabled = !snapshot.writable;
   $("#new-note-button").title = snapshot.writable ? "新建 Markdown 笔记" : "只读模式";
@@ -252,9 +246,9 @@ function applySnapshot(snapshot) {
   renderTree();
 }
 
-async function leaveEditor() {
+async function leaveEditor(forcePrompt = false) {
   if (!editor.active) return true;
-  if (!await editor.mayLeave()) return false;
+  if (!await editor.mayLeave(forcePrompt)) return false;
   editor.close();
   showReading();
   return true;
@@ -278,14 +272,12 @@ async function startEditor(note, isNew = false) {
   if (state.vault.saveMode === "git") {
     try {
       const git = await api("/admin/api/git");
-      renderGit(git);
       if (!git.canWrite) { toast(git.message); return; }
       if (!isNew && note.gitHead !== git.head) { toast("仓库版本已变化，请重新读取笔记再编辑"); return; }
       note = { ...note, gitHead: git.head };
     } catch (error) { toast(error.message); return; }
   }
   state.view = "edit";
-  $("#panel-publish").disabled = true;
   state.current = note.path;
   state.note = note;
   if (!state.tabs.includes(note.path)) state.tabs.push(note.path);
@@ -337,7 +329,6 @@ async function showGraph(local = false, recordHistory = true) {
   state.request++;
   state.view = "graph";
   setEditorControls(false);
-  $("#panel-publish").disabled = true;
   state.graphTab = true;
   $("#graph-view").hidden = false;
   $("#editor-view").hidden = true;
@@ -358,7 +349,6 @@ async function showGraph(local = false, recordHistory = true) {
 }
 
 function showEmpty(message = "选择一篇笔记", error = false) {
-  $("#panel-publish").disabled = true;
   const empty = el("div", "empty-state");
   empty.append(el("h1", "", error ? "无法打开笔记" : "笔记"), el("p", "", message));
   if (error) {
@@ -377,7 +367,6 @@ function showEmpty(message = "选择一篇笔记", error = false) {
 function renderDocument() {
   const note = state.note;
   if (!note) return;
-  $("#panel-publish").disabled = false;
   const container = $("#document-container");
   container.replaceChildren();
   if (note.properties && !state.source) {
@@ -463,7 +452,6 @@ async function openNote(path, options = {}) {
   const request = ++state.request;
   state.current = path;
   state.note = null;
-  $("#panel-publish").disabled = true;
   $("#edit-button").disabled = true;
   if (!state.tabs.includes(path)) state.tabs.push(path);
   reveal(path);
@@ -553,18 +541,6 @@ $("#search-button").onclick = () => { setPane(true); $("#file-search").focus(); 
 $("#files-button").onclick = () => { setPane(true); $("#file-search").value = ""; renderTree(); };
 $("#edit-button").onclick = () => { if (state.vault?.writable && state.note) startEditor(state.note); };
 $("#new-note-button").onclick = newNote;
-$("#panel-settings").onclick = async () => { if (!editor.busy && !gitBusy && await leaveEditor()) location.assign("/admin/settings"); };
-$("#panel-end-test").onclick = async () => {
-  if (editor.busy || gitBusy) return;
-  const button = $("#panel-end-test");
-  button.disabled = true;
-  try {
-    await api("/admin/api/test/stop", { method: "POST" });
-    editor.close();
-    graphView.hide();
-    location.replace("about:blank");
-  } catch (error) { button.disabled = false; toast(error.message); }
-};
 $("#new-note-path").oninput = () => $("#new-note-path").setCustomValidity("");
 $("#new-note-form").onsubmit = (event) => {
   if (event.submitter?.value !== "create") return;
@@ -601,24 +577,6 @@ $("#outline-toggle").onclick = () => {
 };
 $("#preview-button").onclick = () => { state.source = false; renderDocument(); };
 $("#source-button").onclick = () => { state.source = true; renderDocument(); };
-// The theme belongs to the saved configuration, not to this browser, so the
-// public site and the admin workspace always agree.
-$("#theme-button").onclick = async () => {
-  if (!state.vault) return;
-  const current = document.documentElement.dataset.theme || "auto";
-  const next = current === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
-  try {
-    const config = await api("/admin/api/blog");
-    const payload = blogSettingsPayload({ ...config, theme: next });
-    const saved = await api("/admin/api/blog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    if (blogConfig) renderBlog(saved);
-    toast(next === "dark" ? "已切换到深色模式" : "已切换到浅色模式");
-  } catch (error) {
-    document.documentElement.dataset.theme = current;
-    toast(error.message);
-  }
-};
 window.addEventListener("popstate", async () => {
   if (editor.active && !await leaveEditor()) { history.pushState(null, "", editor.location); return; }
   const params = new URLSearchParams(location.search);
@@ -644,573 +602,34 @@ document.addEventListener("keydown", (event) => {
 $(".search-field kbd").textContent = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ K" : "Ctrl K";
 loadVault(true);
 
-let gitBusy = false;
-let gitStatus = null;
-const gitLabels = { disabled: "本地目录", current: "已同步", dirty: "本地修改待处理", offline: "远端不可用", ahead: "本地提交待推送", changed: "远端已变化", blocked: "仓库状态异常" };
-function renderGit(status) {
-  gitStatus = status;
-  $("#git-state").textContent = gitLabels[status.state] || status.state;
-  $("#git-message").textContent = status.state === "current" ? "" : status.message;
-  $("#git-branch").textContent = status.branch || "—";
-  $("#git-head").textContent = status.head?.slice(0, 12) || "—";
-  $("#git-remote").textContent = status.remoteHead?.slice(0, 12) || "—";
-  $("#git-check").disabled = gitBusy;
-  $("#git-pull").disabled = gitBusy || status.state !== "changed";
-  $("#git-push").disabled = gitBusy || !status.canPush;
-  $("#panel-git").textContent = `Git 管理 · ${gitLabels[status.state] || status.state}`;
-}
-async function gitOperation(action = "check") {
-  if (gitBusy || editor.busy) return;
-  // Pull/push must never change the checkout under an active editor.
-  if (action !== "check" && !await leaveEditor()) return;
-  gitBusy = true;
-  for (const id of ["git-check", "git-pull", "git-push"]) $(`#${id}`).disabled = true;
-  $("#git-message").textContent = action === "check" ? "正在核对远端…" : "同步中…";
-  let errorMessage;
+// Settings is a standalone page; follow the existing save/discard/cancel flow
+// before leaving the workspace, even when in-workspace draft prompts are off.
+let openingSettings = false;
+async function openSettings(tab) {
+  if (openingSettings) return;
+  openingSettings = true;
   try {
-    const result = await api(`/admin/api/git${action === "check" ? "" : `/${action}`}`, { method: action === "check" ? "GET" : "POST" });
-    renderGit(result);
-    if (action !== "check") {
-      await loadVault();
-      toast(result.warning || result.message);
-    }
-  } catch (error) {
-    errorMessage = error.message;
-    try { renderGit(await api("/admin/api/git")); } catch { /* Keep the action error visible. */ }
-  } finally {
-    gitBusy = false;
-    if (gitStatus) renderGit(gitStatus);
-    else $("#git-check").disabled = false;
-    if (errorMessage) $("#git-message").textContent = errorMessage;
-  }
+    if (!await leaveEditor(true)) return;
+    const draftPath = editor.draft?.isNew && editor.path === state.current;
+    const params = new URLSearchParams({ tab, return: draftPath ? "/admin/" : location.pathname + location.search + location.hash });
+    if (!draftPath && state.note) params.set("note", state.note.path);
+    location.assign(`/admin/settings?${params}`);
+  } finally { openingSettings = false; }
 }
-function showAdmin() {
-  if (!$("#admin-dialog").open) $("#admin-dialog").showModal();
-}
-$("#admin-button").onclick = $("#panel-git").onclick = showAdmin;
-$("#admin-close").onclick = () => $("#admin-dialog").close();
-$("#git-check").onclick = () => gitOperation();
-$("#git-pull").onclick = async () => {
-  // Close the modal before any dirty-draft confirmation is opened.
-  $("#admin-dialog").close(); await gitOperation("pull"); showAdmin();
-};
-$("#git-push").onclick = async () => { $("#admin-dialog").close(); await gitOperation("push"); showAdmin(); };
-$("#panel-logout").onclick = async () => {
-  if (gitBusy || editor.busy) return;
-  $("#panel-dialog").close();
-  $("#admin-dialog").close();
-  if (!await leaveEditor()) return;
-  try { await api("/admin/api/logout", { method: "POST" }); location.assign("/admin/login"); }
-  catch (error) { toast(error.message); }
-};
+$("#settings-button").onclick = () => openSettings("appearance");
+$("#git-settings-button").onclick = () => openSettings("git");
 
-let publicationNote = null;
-let publicationRecord = null;
-let publicationBusy = false;
-function localDateInput(value) {
-  const date = new Date(value);
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
-}
-function renderPublication() {
-  const record = publicationRecord;
-  $("#publication-enabled").checked = Boolean(record?.enabled);
-  $("#publication-enabled").disabled = publicationBusy;
-  $("#publication-date").disabled = publicationBusy || !record?.id;
-  $("#publication-date-save").disabled = publicationBusy || !record?.id;
-  $("#publication-refresh").disabled = publicationBusy;
-  $("#publication-close").disabled = publicationBusy;
-  $("#publication-date").value = record?.publishedAt ? localDateInput(record.publishedAt) : "";
-  $("#publication-link").hidden = !record?.enabled;
-  if (record?.url) $("#publication-link").href = record.url;
-}
-$("#panel-publish").onclick = async () => {
-  if (!state.note || state.view !== "note") return;
-  const note = state.note;
-  $("#panel-dialog").close();
-  $("#panel-publish").disabled = true;
+// Preferences affect the workspace on load and on a browser-history return.
+async function loadWorkspacePreferences() {
   try {
-    const record = await api(`/admin/api/publication?${new URLSearchParams({ path: note.path })}`);
-    if (state.note !== note || state.view !== "note") return;
-    publicationNote = note;
-    publicationRecord = record;
-    $("#publication-note-title").textContent = note.title;
-    $("#publication-status").textContent = "";
-    renderPublication();
-    $("#publication-dialog").showModal();
-  } catch (error) { toast(error.message); }
-  finally { $("#panel-publish").disabled = !state.note || state.view !== "note"; }
-};
-$("#publication-close").onclick = () => $("#publication-dialog").close();
-$("#publication-dialog").addEventListener("cancel", (event) => { if (publicationBusy) event.preventDefault(); });
-async function updatePublication(enabled, date) {
-  if (publicationBusy) return;
-  publicationBusy = true;
-  renderPublication();
-  $("#publication-status").textContent = "保存中…";
-  try {
-    publicationRecord = await api("/admin/api/publication", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: publicationNote.path, enabled, publishedAt: date, revision: publicationNote.revision, gitHead: publicationNote.gitHead }) });
-    $("#publication-status").textContent = date ? "发布时间已保存" : enabled ? "已发布" : "已取消发布";
-  } catch (error) { $("#publication-status").textContent = error.message; }
-  finally { publicationBusy = false; renderPublication(); }
+    const list = await api("/admin/api/preferences");
+    const value = (key, fallback) => list.find((item) => item.key === key)?.value ?? fallback;
+    document.documentElement.classList.toggle("pref-no-live-preview", !value("editor.autoPreview", true));
+    editor.setLivePreview(value("editor.autoPreview", true));
+    editor.setSpellcheck(value("editor.spellcheck", false));
+    editor.setDraftGuard(value("editor.autoSaveDraft", true));
+    graphView.setHoverPreview(value("graph.hoverPreview", true));
+  } catch { /* Keep defaults when settings are unavailable. */ }
 }
-$("#publication-enabled").onchange = (event) => updatePublication(event.target.checked);
-$("#publication-date-form").onsubmit = (event) => {
-  event.preventDefault();
-  const date = new Date($("#publication-date").value);
-  if (!Number.isFinite(date.getTime()) || date.getTime() > Date.now() + 60000) { $("#publication-status").textContent = "发布时间不能晚于当前时间"; return; }
-  updatePublication(publicationRecord.enabled, date.toISOString());
-};
-$("#publication-refresh").onclick = async () => {
-  if (publicationBusy) return;
-  publicationBusy = true; renderPublication();
-  $("#publication-status").textContent = "更新中…";
-  try {
-    await api("/admin/api/publications/refresh", { method: "POST" });
-    publicationRecord = await api(`/admin/api/publication?${new URLSearchParams({ path: publicationNote.path })}`);
-    $("#publication-status").textContent = "公开副本已更新";
-  } catch (error) { $("#publication-status").textContent = error.message; }
-  finally { publicationBusy = false; renderPublication(); }
-};
-
-// --- Panel: blog configuration -------------------------------------------------
-let blogConfig = null;
-let blogBusy = false;
-
-function blogError(message = "") {
-  const node = $("#blog-error");
-  node.textContent = message;
-  node.hidden = !message;
-}
-
-// Swatches show the color itself plus its name, because a hex value alone does
-// not tell an author what the page will look like.
-const ACCENT_NAMES = {
-  "#406c50": "松绿", "#2f6f8f": "雾蓝", "#8a5a3b": "赭石",
-  "#7a4b6d": "紫藤", "#3f5d7d": "石青", "#a0403f": "朱砂",
-  "#5c6b2f": "苔绿", "#3a3a3a": "墨灰",
-};
-
-function renderAccentSwatches(values, selected) {
-  const container = $("#blog-accent");
-  container.replaceChildren();
-  const current = selected || values[0] || "";
-  for (const value of values) {
-    const label = document.createElement("label");
-    label.className = "accent-swatch";
-    label.style.setProperty("--swatch", value);
-    label.title = `${ACCENT_NAMES[value] || value} ${value}`;
-    const radio = document.createElement("input");
-    radio.type = "radio";
-    radio.name = "blog-accent";
-    radio.value = value;
-    radio.checked = value === current;
-    radio.onchange = () => { blogPreview(); saveAppearance(); };
-    label.append(radio, el("span", "accent-dot"), el("span", "accent-name", ACCENT_NAMES[value] || value));
-    container.append(label);
-  }
-}
-
-function selectedAccent() {
-  return document.querySelector('input[name="blog-accent"]:checked')?.value || "";
-}
-
-function selectedTheme() {
-  return document.querySelector('input[name="blog-theme"]:checked')?.value || "auto";
-}
-
-function blogPreview() {
-  const accent = selectedAccent();
-  const title = $("#blog-title").value.trim() || "未命名博客";
-  const author = $("#blog-author").value.trim();
-  const preview = $("#blog-preview");
-  preview.style.setProperty("--preview-accent", accent);
-  // Mirror the mode so the preview strip does not lie about the saved scheme.
-  preview.dataset.theme = selectedTheme();
-  $("#blog-preview-text").textContent = author ? `${title} · ${author}` : title;
-}
-
-function makePageRow(page = {}) {
-  const slug = page.slug || "";
-  const row = el("div", "blog-page");
-  row.dataset.createdAt = page.createdAt || "";
-  row.dataset.updatedAt = page.updatedAt || "";
-  const head = el("div", "blog-page-head");
-  const slugWrap = el("label", "blog-page-slug");
-  slugWrap.append(el("span", "", "短地址"));
-  const slugInput = document.createElement("input");
-  slugInput.value = slug;
-  slugInput.placeholder = "about";
-  slugInput.maxLength = 64;
-  slugInput.autocomplete = "off";
-  slugInput.className = "blog-page-slug-input";
-  // Normalize as the author types so the visible value matches what is saved.
-  slugInput.onblur = () => { if (slugInput.value.trim()) slugInput.value = slugify(slugInput.value); };
-  slugWrap.append(slugInput);
-  const titleInput = document.createElement("input");
-  titleInput.value = page.title || "";
-  titleInput.placeholder = "页面标题";
-  titleInput.maxLength = 120;
-  titleInput.autocomplete = "off";
-  titleInput.className = "blog-page-title";
-  head.append(slugWrap, titleInput);
-  const remove = el("button", "blog-page-remove", "删除");
-  remove.type = "button";
-  remove.onclick = () => { row.remove(); if (!blogPagesCount()) $("#blog-pages").append(el("p", "tree-message", "还没有独立页面")); };
-  head.append(remove);
-
-  const source = document.createElement("textarea");
-  source.value = page.source || "";
-  source.rows = 6;
-  source.spellcheck = false;
-  source.className = "blog-page-source";
-  source.setAttribute("aria-label", "页面 Markdown 内容");
-
-  row.append(head, source);
-  row.getValue = () => ({ slug: slugInput.value.trim(), title: titleInput.value.trim(), source: source.value, createdAt: row.dataset.createdAt, updatedAt: row.dataset.updatedAt });
-  return row;
-}
-
-function blogPagesCount() { return $("#blog-pages").querySelectorAll(".blog-page").length; }
-
-function blankPagesMessage() {
-  const empty = $("#blog-pages").querySelector(".tree-message");
-  if (empty) empty.hidden = blogPagesCount() > 0;
-  else if (!blogPagesCount()) $("#blog-pages").append(el("p", "tree-message", "还没有独立页面"));
-}
-
-function renderBlogPages(pages) {
-  const container = $("#blog-pages");
-  container.replaceChildren();
-  for (const page of pages || []) container.append(makePageRow(page));
-  blankPagesMessage();
-}
-
-function renderBlog(config) {
-  blogConfig = config;
-  $("#blog-title").value = config.title || "";
-  $("#blog-description").value = config.description || "";
-  $("#blog-author").value = config.author || "";
-  $("#blog-footer").value = config.footer || "";
-  renderAccentSwatches(config.accents || [], config.accent);
-  const theme = config.theme || "auto";
-  for (const input of document.querySelectorAll('input[name="blog-theme"]')) input.checked = input.value === theme;
-  renderBlogPages(config.pages);
-  blogPreview();
-  $("#panel-blog-state").textContent = config.vault || "";
-}
-
-// The GET response carries read-only extras (accents, themes, vault,
-// preferences). The server rejects unknown fields, so only the editable
-// configuration may be sent back.
-function blogSettingsPayload(config) {
-  return {
-    title: config.title ?? "",
-    description: config.description ?? "",
-    author: config.author ?? "",
-    footer: config.footer ?? "",
-    accent: config.accent ?? "",
-    theme: config.theme ?? "auto",
-    pages: (config.pages ?? []).map((page) => ({
-      slug: page.slug ?? "",
-      title: page.title ?? "",
-      source: page.source ?? "",
-      createdAt: page.createdAt,
-      updatedAt: page.updatedAt,
-    })),
-  };
-}
-
-function blogPayload() {
-  return {
-    title: $("#blog-title").value.trim(),
-    description: $("#blog-description").value.trim(),
-    author: $("#blog-author").value.trim(),
-    footer: $("#blog-footer").value.trim(),
-    accent: selectedAccent(),
-    theme: selectedTheme(),
-    pages: [...$("#blog-pages").querySelectorAll(".blog-page")].map((row) => row.getValue()),
-  };
-}
-
-$("#blog-title").oninput = $("#blog-author").oninput = blogPreview;
-for (const input of document.querySelectorAll('input[name="blog-theme"]')) input.onchange = () => { blogPreview(); saveAppearance(); };
-$("#blog-add-page").onclick = () => {
-  if (blogPagesCount() >= MAX_PAGES) { blogError(`最多 ${MAX_PAGES} 个独立页面`); return; }
-  blogError();
-  const taken = [...$("#blog-pages").querySelectorAll(".blog-page-slug-input")].map((input) => input.value.trim()).filter(Boolean);
-  const row = makePageRow({ slug: uniqueSlug("page", taken), title: "新页面", source: "" });
-  $("#blog-pages").append(row);
-  blankPagesMessage();
-  row.querySelector(".blog-page-slug-input").focus();
-};
-$("#blog-form").onsubmit = async (event) => {
-  event.preventDefault();
-  if (blogBusy || !blogConfig) return;
-  const payload = blogPayload();
-  const checked = validateBlog(payload);
-  if (!checked.ok) { blogError(checked.error); return; }
-  payload.pages = checked.pages;
-  blogBusy = true;
-  blogError();
-  $("#blog-save").disabled = true;
-  $("#panel-blog-state").textContent = "保存中…";
-  try {
-    const saved = await api("/admin/api/blog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    renderBlog(saved);
-    toast("博客设置已保存");
-  } catch (error) { blogError(error.message); $("#panel-blog-state").textContent = ""; }
-  finally { blogBusy = false; $("#blog-save").disabled = false; }
-};
-
-// --- Panel sections -----------------------------------------------------------
-const panelTabs = [...document.querySelectorAll("[data-panel-tab]")];
-const panelSections = [...document.querySelectorAll("[data-panel-section]")];
-
-function showPanelSection(name) {
-  for (const tab of panelTabs) tab.setAttribute("aria-selected", String(tab.dataset.panelTab === name));
-  for (const section of panelSections) section.hidden = section.dataset.panelSection !== name;
-  if (name === "appearance" || name === "blog") loadBlog();
-  if (name === "general") loadPreferences();
-  if (name === "tools") loadVersion();
-}
-for (const tab of panelTabs) tab.onclick = () => showPanelSection(tab.dataset.panelTab);
-
-async function loadBlog() {
-  $("#panel-blog-state").textContent = "读取中…";
-  try { renderBlog(await api("/admin/api/blog")); }
-  catch (error) { blogError(error.message); $("#panel-blog-state").textContent = ""; }
-}
-
-// --- Adjustable switches ------------------------------------------------------
-// Every switch is rendered from the server-side registry, so a new feature only
-// adds a definition in publication/packages and appears here automatically.
-let preferences = [];
-let preferencesBusy = false;
-
-function emptyState(message) { return el("p", "tree-message", message); }
-
-function renderPreferences(list) {
-  const container = $("#panel-prefs");
-  preferences = list;
-  container.replaceChildren();
-  if (!list.length) { container.append(emptyState("暂无可调整选项")); return; }
-  const sections = new Map();
-  for (const pref of list) {
-    if (!sections.has(pref.section)) sections.set(pref.section, []);
-    sections.get(pref.section).push(pref);
-  }
-  for (const [section, items] of sections) {
-    const group = el("div", "pref-group");
-    group.append(el("h4", "pref-group-title", section));
-    for (const pref of items) group.append(makePreferenceRow(pref));
-    container.append(group);
-  }
-}
-
-function makePreferenceRow(pref) {
-  const row = el("label", `pref-row${pref.locked ? " locked" : ""}`);
-  const text = el("div", "pref-text");
-  text.append(el("span", "pref-label", pref.label));
-  if (pref.note) text.append(el("small", "pref-note", pref.note));
-  if (pref.locked) text.append(el("small", "pref-locked", pref.locked));
-  const toggle = document.createElement("input");
-  toggle.type = "checkbox";
-  toggle.className = "pref-toggle";
-  toggle.checked = Boolean(pref.value);
-  toggle.disabled = Boolean(pref.locked) || preferencesBusy;
-  toggle.onchange = () => savePreference(pref.key, toggle.checked, toggle);
-  row.append(text, toggle);
-  return row;
-}
-
-async function savePreference(key, value, toggle) {
-  if (preferencesBusy) return;
-  preferencesBusy = true;
-  $("#prefs-error").hidden = true;
-  $("#panel-prefs-state").textContent = "保存中…";
-  try {
-    preferences = await api("/admin/api/preferences", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values: { [key]: value } }) });
-    renderPreferences(preferences);
-    applyPreferences(preferences);
-    $("#panel-prefs-state").textContent = "";
-  } catch (error) {
-    toggle.checked = !value;
-    $("#prefs-error").textContent = error.message;
-    $("#prefs-error").hidden = false;
-    $("#panel-prefs-state").textContent = "";
-  } finally { preferencesBusy = false; }
-}
-
-async function loadPreferences() {
-  $("#panel-prefs-state").textContent = "读取中…";
-  try {
-    preferences = await api("/admin/api/preferences");
-    renderPreferences(preferences);
-    applyPreferences(preferences);
-    $("#panel-prefs-state").textContent = "";
-  } catch (error) {
-    $("#prefs-error").textContent = error.message;
-    $("#prefs-error").hidden = false;
-    $("#panel-prefs-state").textContent = "";
-  }
-}
-
-// applyPreferences pushes switch values into the running UI. Unknown keys are
-// ignored so older browsers keep working after a server adds a feature.
-function applyPreferences(list) {
-  const value = (key, fallback) => {
-    const pref = list.find((item) => item.key === key);
-    return pref ? Boolean(pref.value) : fallback;
-  };
-  document.documentElement.classList.toggle("pref-no-live-preview", !value("editor.autoPreview", true));
-  editor.setLivePreview(value("editor.autoPreview", true));
-  editor.setSpellcheck(value("editor.spellcheck", false));
-  editor.setDraftGuard(value("editor.autoSaveDraft", true));
-  graphView.setHoverPreview(value("graph.hoverPreview", true));
-}
-
-// Appearance applies to every surface, so it saves on change rather than
-// waiting for the blog form. The stylesheet is regenerated server-side.
-let appearanceBusy = false;
-async function saveAppearance() {
-  if (appearanceBusy || !blogConfig) return;
-  appearanceBusy = true;
-  const state = $("#panel-appearance-state");
-  state.textContent = "保存中…";
-  try {
-    const saved = await api("/admin/api/blog", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(blogSettingsPayload({ ...blogConfig, accent: selectedAccent(), theme: selectedTheme() })),
-    });
-    blogConfig = saved;
-    applyDocumentTheme(selectedTheme());
-    toast("外观已更新");
-    state.textContent = "全站生效";
-  } catch (error) {
-    toast(error.message);
-    state.textContent = "保存失败";
-  } finally { appearanceBusy = false; }
-}
-
-// Mirror the saved mode onto the document so the panel reflects it at once.
-function applyDocumentTheme(mode) {
-  if (mode === "auto") delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = mode;
-  // Reload the generated palette so the accent applies without a full reload.
-  const link = document.querySelector('link[data-theme-sheet]');
-  if (link) { const fresh = link.cloneNode(); fresh.href = "/theme.css?t=" + Date.now(); link.replaceWith(fresh); }
-}
-
-// --- Version and update check ------------------------------------------------
-let versionBusy = false;
-let versionChecked = false;
-
-function renderVersion(current) {
-  $("#version-current").textContent = current.version === "dev"
-    ? "开发版本"
-    : `${current.version}${current.commit && current.commit !== "unknown" ? ` (${current.commit.slice(0, 7)})` : ""}`;
-}
-
-// loadVersion fills the current build immediately, then checks GitHub once per
-// panel session so opening the panel does not hammer the API.
-async function loadVersion() {
-  if (versionChecked) return;
-  versionChecked = true;
-  try {
-    renderVersion(await api("/admin/api/version"));
-  } catch { /* The panel still works without version data. */ }
-}
-
-async function checkForUpdate() {
-  if (versionBusy) return;
-  versionBusy = true;
-  $("#version-check").disabled = true;
-  $("#version-state").textContent = "检查中…";
-  $("#version-message").textContent = "";
-  try {
-    const status = await api("/admin/api/update");
-    renderVersion(status.current);
-    $("#version-latest").textContent = status.latest || "—";
-    const link = $("#version-link");
-    link.hidden = !status.url;
-    if (status.url) link.href = status.url;
-    if (status.available) {
-      $("#version-state").textContent = "有新版本";
-      // Installing replaces the running server binary, so it is always an
-      // explicit click. The preference only changes the wording below.
-      $("#version-install").hidden = false;
-      $("#version-message").textContent = "新版本已就绪，点击「立即更新」下载并校验。安装后需要重启服务生效。";
-      if (status.notes) {
-        $("#version-notes").textContent = status.notes;
-        $("#version-notes-wrap").hidden = false;
-      }
-    } else if (status.error) {
-      $("#version-state").textContent = "检查失败";
-      $("#version-message").textContent = status.error;
-    } else {
-      $("#version-state").textContent = "已是最新";
-      $("#version-message").textContent = "";
-    }
-  } catch (error) {
-    $("#version-state").textContent = "检查失败";
-    $("#version-message").textContent = error.message;
-  } finally {
-    versionBusy = false;
-    $("#version-check").disabled = false;
-  }
-}
-
-$("#version-check").onclick = checkForUpdate;
-
-// installUpdate downloads and stages the release. Restarting stays a separate
-// step because the process must answer this request before it is replaced.
-async function installUpdate() {
-  if (versionBusy) return;
-  versionBusy = true;
-  $("#version-install").disabled = true;
-  $("#version-check").disabled = true;
-  $("#version-state").textContent = "更新中…";
-  $("#version-message").textContent = "正在下载并校验…";
-  try {
-    const result = await api("/admin/api/update/install", { method: "POST" });
-    $("#version-state").textContent = "已下载";
-    $("#version-message").textContent = `${result.version} 已校验通过，正在重启…`;
-    await restartIntoUpdate();
-  } catch (error) {
-    $("#version-state").textContent = "更新失败";
-    $("#version-message").textContent = error.message;
-    $("#version-install").disabled = false;
-    $("#version-check").disabled = false;
-  } finally { versionBusy = false; }
-}
-
-// The process is replaced by the new build, so wait for the port to answer
-// again instead of trusting the request that started it.
-async function restartIntoUpdate() {
-  try {
-    await api("/admin/api/update/restart", { method: "POST" });
-  } catch { /* The connection usually drops mid-restart; recovery below decides. */ }
-  const deadline = Date.now() + 30000;
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    try {
-      const response = await fetch("/admin/api/version", { cache: "no-store" });
-      if (response.ok) { location.reload(); return; }
-    } catch { /* Still restarting. */ }
-  }
-  $("#version-state").textContent = "重启超时";
-  $("#version-message").textContent = "服务在 30 秒内没有恢复，请检查容器日志。";
-}
-
-$("#version-install").onclick = installUpdate;
-
-$("#panel-button").onclick = async () => {
-  if (editor.busy || gitBusy) return;
-  if (!await leaveEditor()) return;
-  $("#panel-publish").disabled = !state.note || state.view !== "note";
-  showPanelSection("tools");
-  $("#panel-dialog").showModal();
-  loadPreferences();
-};
-$("#panel-close").onclick = () => $("#panel-dialog").close();
-$("#panel-dialog").addEventListener("cancel", (event) => { if (blogBusy || preferencesBusy) event.preventDefault(); });
+loadWorkspacePreferences();
+window.addEventListener("pageshow", (event) => { if (event.persisted) loadWorkspacePreferences(); });

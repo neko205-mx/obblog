@@ -52,7 +52,7 @@ func TestSettingsPageIsSeparateFromInstallationWizard(t *testing.T) {
 			t.Errorf("settings page still uses installation flow: %s", forbidden)
 		}
 	}
-	for _, endpoint := range []string{"/admin/settings.js", "/admin/settings.css"} {
+	for _, endpoint := range []string{"/admin/settings.js", "/admin/settings.css", "/admin/blog-model.mjs"} {
 		if w := runtimeRequest(rt, "GET", endpoint, cookie, nil); w.Code != 200 {
 			t.Fatalf("settings asset %s: %d", endpoint, w.Code)
 		}
@@ -99,5 +99,33 @@ func TestSettingsCanSaveRepositoryAndTokenWithoutPasswordStep(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(after.Vault, "note.md"))
 	if err != nil || string(raw) != source {
 		t.Fatal("saving settings changed note contents")
+	}
+}
+
+func TestSettingsCenterContainsSixPrimaryTabs(t *testing.T) {
+	rt, _ := runtimeForTest(t)
+	installTestRuntime(t, rt, "empty", "")
+	cookie := runtimeLogin(t, rt, testPassword)
+	page := runtimeRequest(rt, "GET", "/admin/settings?tab=publication&note=note.md", cookie, nil)
+	if page.Code != 200 {
+		t.Fatalf("settings deep link: %d %s", page.Code, page.Body.String())
+	}
+	html := page.Body.String()
+	for _, key := range []string{"appearance", "general", "blog", "git", "publication", "system"} {
+		if !strings.Contains(html, `aria-controls="settings-`+key+`"`) || !strings.Contains(html, `id="settings-`+key+`" role="tabpanel"`) {
+			t.Errorf("missing primary settings tab %s", key)
+		}
+	}
+	if strings.Count(html, `role="tab"`) != 6 || strings.Contains(html, "<dialog") {
+		t.Fatal("settings should have six inline tabs and no dialog")
+	}
+	if !strings.Contains(html, `id="publication-note"`) || !strings.Contains(html, `id="system-version"`) {
+		t.Fatal("publication note selector or version section missing")
+	}
+	workbench := runtimeRequest(rt, "GET", "/admin/", cookie, nil).Body.String()
+	for _, id := range []string{"panel-dialog", "admin-dialog", "publication-dialog", "settings-form", "panel-git"} {
+		if strings.Contains(workbench, `id="`+id+`"`) {
+			t.Errorf("workspace still contains old settings element %s", id)
+		}
 	}
 }

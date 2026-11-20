@@ -404,6 +404,11 @@ func TestMissingVaultAuthenticatedRecovery(t *testing.T) {
 		t.Fatal("missing vault reopened first-time setup")
 	}
 	cookie := runtimeLogin(t, recovery, testPassword)
+	for _, path := range []string{"/admin/settings", "/admin/settings.js", "/admin/settings.css", "/admin/blog-model.mjs"} {
+		if w := runtimeRequest(recovery, "GET", path, cookie, nil); w.Code != 200 {
+			t.Fatalf("settings recovery asset %s: %d", path, w.Code)
+		}
+	}
 	w = runtimeRequest(recovery, "GET", "/admin/api/settings", cookie, nil)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "知识库暂时不可用") {
 		t.Fatal("recovery settings unavailable")

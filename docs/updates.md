@@ -8,7 +8,7 @@
 obblog -version          # v1.2.3 (abcdef1)
 ```
 
-后台「设置与工具 → 工具」显示当前版本，并可检查 GitHub 上是否有更新。`GET /admin/api/version` 返回 `{"version","commit","date"}`。
+后台「设置与工具 → 系统设置 → 版本与更新」显示当前版本，并可检查 GitHub 上是否有更新。`GET /admin/api/version` 返回 `{"version","commit","date"}`。
 
 未注入时报告 `dev`，它的排序低于任何已发布版本，因此开发构建永远能看到正式版为「有更新」。
 
@@ -66,7 +66,7 @@ podman build --build-arg VERSION=v1.2.3 \
 
 点击「立即更新」后依次执行：
 
-1. 请求 `GET /admin/api/update/install`
+1. 请求 `POST /admin/api/update/install`
 2. 下载 `SHA256SUMS`，取出本平台二进制的摘要
 3. 下载二进制到 `<data>/bin/.download-*`，边写边算 SHA-256
 4. 比对摘要，不符则删除临时文件并拒绝

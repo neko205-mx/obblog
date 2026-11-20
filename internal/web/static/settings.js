@@ -1,14 +1,33 @@
+import { MAX_PAGES, slugify, uniqueSlug, validateBlog } from "./blog-model.mjs";
+
 const $ = (id) => document.getElementById(id);
 const endpoint = "/admin/api/settings";
-let previous = null, busy = false, directory = null;
+let context, systemBusy = false, systemDirty = false, leaving = false, directory;
 
-async function request(url, options = {}) {
-  const response = await fetch(url, { cache: "no-store", ...options, headers: { "Content-Type": "application/json", ...options.headers } });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || `请求失败（${response.status}）`);
+async function request(url, { body, method = "GET" } = {}) {
+  const response = await fetch(url, { cache: "no-store", method,
+    ...(body !== undefined && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || data === null) {
+    throw new Error(response.status === 401 ? "会话已过期，请重新登录" : data?.error || `请求失败（${response.status}）`);
+  }
   return data;
 }
 
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function alertAt(id, message = "") {
+  $(id).textContent = message;
+  $(id).hidden = !message;
+}
+
+// System form and directory picker.
 function error(message = "") {
   $("settings-error").textContent = message;
   $("settings-error").hidden = !message;
@@ -25,14 +44,13 @@ function updateSource() {
   $("repository-url").disabled = source !== "clone";
   $("repository-branch").disabled = source !== "clone";
   $("credentials").hidden = source === "empty";
-  document.querySelector('.settings-nav a[href="#credentials"]').hidden = source === "empty";
 }
 document.querySelectorAll('input[name="mode"]').forEach((input) => input.onchange = updateSource);
 $("git-token").oninput = () => { if ($("git-token").value) $("clear-token").checked = false; };
 
 $("settings-form").onsubmit = async (event) => {
   event.preventDefault();
-  if (busy || !previous) return;
+  if (!context?.managed || workInProgress()) return;
   error();
   const password = $("new-password").value;
   const confirmation = $("confirm-password").value;
@@ -40,31 +58,39 @@ $("settings-form").onsubmit = async (event) => {
   if (password && (length < 12 || length > 1024)) { error("密码需要 12 至 1024 字节"); $("new-password").focus(); return; }
   if (password !== confirmation) { error("两次密码输入不一致"); $("confirm-password").focus(); return; }
   const input = { mode: mode(), vault: $("vault-path").value.trim(), repository: $("repository-url").value.trim(), branch: $("repository-branch").value.trim(), username: $("git-username").value.trim(), token: $("git-token").value.trim(), clearToken: $("clear-token").checked, password, confirmation };
-  if (input.mode === "clone" && !input.token && previous.tokenConfigured && !input.clearToken) { error("更换仓库请重新填写 Token，公开仓库请勾选清除已保存 Token"); $("git-token").focus(); return; }
-  busy = true;
+  if (input.mode === "clone" && !input.token && context.tokenConfigured && !input.clearToken) { error("更换仓库请重新填写 Token，公开仓库请勾选清除已保存 Token"); $("git-token").focus(); return; }
+  if (blogDirty && !window.confirm("保存系统设置会退出登录，是否放弃未保存的博客设置？")) return;
+  systemBusy = true;
   const controls = [...$("settings-form").querySelectorAll("input,button")].map((control) => [control, control.disabled]);
   controls.forEach(([control]) => { control.disabled = true; });
   $("save-settings").disabled = true;
   $("save-settings").textContent = input.mode === "clone" ? "克隆中…" : "保存中…";
   try {
-    const result = await request(endpoint, { method: "POST", body: JSON.stringify(input) });
+    const result = await request(endpoint, { method: "POST", body: input });
     $("new-password").value = $("confirm-password").value = $("git-token").value = "";
-    busy = false;
+    systemBusy = false;
+    leaving = true;
     location.assign(result.redirect);
   } catch (e) { error(e.message); }
   finally {
-    busy = false;
+    systemBusy = false;
     controls.forEach(([control, disabled]) => { control.disabled = disabled; });
     $("save-settings").disabled = false;
-    $("save-settings").textContent = "保存设置";
+    $("save-settings").textContent = "保存系统设置";
   }
 };
 
+let directoryRequest = 0;
 async function browse(path = "") {
+  const id = ++directoryRequest;
+  directory = null;
+  $("directory-select").disabled = $("directory-parent").disabled = true;
   $("directory-error").textContent = "正在读取…";
   try {
     const data = await request(`${endpoint}/directories?${new URLSearchParams({ path })}`);
+    if (id !== directoryRequest) return;
     directory = data;
+    $("directory-select").disabled = $("directory-parent").disabled = false;
     $("directory-location").value = data.path;
     $("directory-list").replaceChildren();
     for (const name of data.directories) {
@@ -76,53 +102,682 @@ async function browse(path = "") {
     }
     if (!data.directories.length) $("directory-list").textContent = "无子目录";
     $("directory-error").textContent = "";
-  } catch (e) { $("directory-error").textContent = e.message; }
+  } catch (e) { if (id === directoryRequest) $("directory-error").textContent = e.message; }
 }
-$("browse-directory").onclick = () => { $("directory-dialog").showModal(); browse($("vault-path").value.trim()); };
-$("directory-close").onclick = () => $("directory-dialog").close();
-$("directory-form").onsubmit = (event) => { event.preventDefault(); browse($("directory-location").value.trim()); };
-$("directory-parent").onclick = () => { if (directory) browse(directory.parent); };
-$("directory-select").onclick = () => { if (directory) { $("vault-path").value = directory.path; $("directory-dialog").close(); } };
-
-$("end-test-button").onclick = async () => {
-  if (busy) return;
-  busy = true;
-  $("end-test-button").disabled = true;
-  try { await request("/admin/api/test/stop", { method: "POST" }); busy = false; location.replace("about:blank"); }
-  catch (e) { error(e.message); busy = false; $("end-test-button").disabled = false; }
-};
-window.addEventListener("beforeunload", (event) => { if (busy) { event.preventDefault(); event.returnValue = ""; } });
-
-const visibleSections = new Set();
-const sections = new IntersectionObserver((entries) => {
-  for (const entry of entries) {
-    if (entry.isIntersecting) visibleSections.add(entry.target.id);
-    else visibleSections.delete(entry.target.id);
+function toggleDirectory(visible) {
+  $("directory-browser").hidden = !visible;
+  $("browse-directory").setAttribute("aria-expanded", String(visible));
+}
+$("browse-directory").onclick = () => {
+  const open = $("directory-browser").hidden;
+  toggleDirectory(open);
+  if (open) {
+    browse($("vault-path").value.trim());
+    $("directory-location").focus();
   }
-  const current = [...document.querySelectorAll(".settings-section")].find((section) => visibleSections.has(section.id));
-  if (!current) return;
-  document.querySelectorAll(".settings-nav a").forEach((link) => {
-    if (link.hash === `#${current.id}`) link.setAttribute("aria-current", "location");
-    else link.removeAttribute("aria-current");
-  });
-}, { rootMargin: "-120px 0px -45% 0px" });
+};
+$("directory-close").onclick = () => { toggleDirectory(false); $("browse-directory").focus(); };
+$("directory-open").onclick = () => browse($("directory-location").value.trim());
+$("directory-location").onkeydown = (event) => {
+  if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); $("directory-open").click(); }
+};
+$("directory-parent").onclick = () => { if (directory) browse(directory.parent); };
+$("directory-select").onclick = () => {
+  if (!directory) return;
+  $("vault-path").value = directory.path;
+  systemDirty = true;
+  toggleDirectory(false);
+  $("vault-path").focus();
+};
+
+$("settings-form").oninput = (event) => { if (!event.target.closest("#directory-browser")) systemDirty = true; };
+
+// Shared appearance and blog configuration.
+let blogConfig = null;
+let siteBusy = false, blogDirty = false, siteLoading = null;
+
+function blogError(message = "") {
+  const node = $("blog-error");
+  node.textContent = message;
+  node.hidden = !message;
+}
+
+// Swatches show the color itself plus its name, because a hex value alone does
+// not tell an author what the page will look like.
+const ACCENT_NAMES = {
+  "#406c50": "松绿", "#2f6f8f": "雾蓝", "#8a5a3b": "赭石",
+  "#7a4b6d": "紫藤", "#3f5d7d": "石青", "#a0403f": "朱砂",
+  "#5c6b2f": "苔绿", "#3a3a3a": "墨灰",
+};
+
+function renderAccentSwatches(values, selected) {
+  const container = $("blog-accent");
+  container.replaceChildren();
+  const current = selected || values[0] || "";
+  for (const value of values) {
+    const label = document.createElement("label");
+    label.className = "accent-swatch";
+    label.style.setProperty("--swatch", value);
+    label.title = `${ACCENT_NAMES[value] || value} ${value}`;
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "blog-accent";
+    radio.value = value;
+    radio.checked = value === current;
+    radio.onchange = () => { blogPreview(); saveAppearance(); };
+    label.append(radio, el("span", "accent-dot"), el("span", "accent-name", ACCENT_NAMES[value] || value));
+    container.append(label);
+  }
+}
+
+function selectedAccent() {
+  return document.querySelector('input[name="blog-accent"]:checked')?.value || "";
+}
+
+function selectedTheme() {
+  return document.querySelector('input[name="blog-theme"]:checked')?.value || "auto";
+}
+
+function blogPreview() {
+  const accent = selectedAccent();
+  const title = blogConfig?.title || "未命名博客";
+  const author = blogConfig?.author;
+  const preview = $("blog-preview");
+  preview.style.setProperty("--preview-accent", accent);
+  $("blog-preview-text").textContent = author ? `${title} · ${author}` : title;
+}
+
+function makePageRow(page = {}) {
+  const slug = page.slug || "";
+  const row = el("div", "blog-page");
+  row.dataset.createdAt = page.createdAt || "";
+  row.dataset.updatedAt = page.updatedAt || "";
+  const head = el("div", "blog-page-head");
+  const slugWrap = el("label", "blog-page-slug");
+  slugWrap.append(el("span", "", "短地址"));
+  const slugInput = document.createElement("input");
+  slugInput.value = slug;
+  slugInput.placeholder = "about";
+  slugInput.maxLength = 64;
+  slugInput.autocomplete = "off";
+  slugInput.className = "blog-page-slug-input";
+  // Normalize as the author types so the visible value matches what is saved.
+  slugInput.onblur = () => { if (slugInput.value.trim()) slugInput.value = slugify(slugInput.value); };
+  slugWrap.append(slugInput);
+  const titleInput = document.createElement("input");
+  titleInput.value = page.title || "";
+  titleInput.placeholder = "页面标题";
+  titleInput.maxLength = 120;
+  titleInput.autocomplete = "off";
+  titleInput.className = "blog-page-title";
+  titleInput.setAttribute("aria-label", "页面标题");
+  head.append(slugWrap, titleInput);
+  const remove = el("button", "blog-page-remove", "删除");
+  remove.type = "button";
+  remove.onclick = () => { row.remove(); blogDirty = true; blankPagesMessage(); };
+  head.append(remove);
+
+  const source = document.createElement("textarea");
+  source.value = page.source || "";
+  source.rows = 6;
+  source.spellcheck = false;
+  source.className = "blog-page-source";
+  source.setAttribute("aria-label", "页面 Markdown 内容");
+
+  row.append(head, source);
+  row.getValue = () => ({ slug: slugInput.value.trim(), title: titleInput.value.trim(), source: source.value, createdAt: row.dataset.createdAt || undefined, updatedAt: row.dataset.updatedAt || undefined });
+  return row;
+}
+
+function blogPagesCount() { return $("blog-pages").querySelectorAll(".blog-page").length; }
+
+function blankPagesMessage() {
+  const empty = $("blog-pages").querySelector(".tree-message");
+  if (empty) empty.hidden = blogPagesCount() > 0;
+  else if (!blogPagesCount()) $("blog-pages").append(el("p", "tree-message", "还没有独立页面"));
+}
+
+function renderBlogPages(pages) {
+  const container = $("blog-pages");
+  container.replaceChildren();
+  for (const page of pages || []) container.append(makePageRow(page));
+  blankPagesMessage();
+}
+
+function renderBlog(config) {
+  blogDirty = false;
+  $("blog-title").value = config.title || "";
+  $("blog-description").value = config.description || "";
+  $("blog-author").value = config.author || "";
+  $("blog-footer").value = config.footer || "";
+  renderBlogPages(config.pages);
+  $("blog-state").textContent = config.vault || "";
+}
+
+// Send only persisted fields, never GET-only metadata.
+function blogSettingsPayload(config) {
+  return {
+    title: config.title ?? "",
+    description: config.description ?? "",
+    author: config.author ?? "",
+    footer: config.footer ?? "",
+    accent: config.accent ?? "",
+    theme: config.theme ?? "auto",
+    pages: (config.pages ?? []).map((page) => ({
+      slug: page.slug ?? "",
+      title: page.title ?? "",
+      source: page.source ?? "",
+      createdAt: page.createdAt,
+      updatedAt: page.updatedAt,
+    })),
+  };
+}
+
+function blogPayload() {
+  return {
+    title: $("blog-title").value.trim(),
+    description: $("blog-description").value.trim(),
+    author: $("blog-author").value.trim(),
+    footer: $("blog-footer").value.trim(),
+    accent: blogConfig.accent,
+    theme: blogConfig.theme,
+    pages: [...$("blog-pages").querySelectorAll(".blog-page")].map((row) => row.getValue()),
+  };
+}
+
+$("blog-form").oninput = () => { blogDirty = true; };
+for (const input of document.querySelectorAll('input[name="blog-theme"]')) input.onchange = () => { blogPreview(); saveAppearance(); };
+$("blog-add-page").onclick = () => {
+  if (blogPagesCount() >= MAX_PAGES) { blogError(`最多 ${MAX_PAGES} 个独立页面`); return; }
+  blogError();
+  const taken = [...$("blog-pages").querySelectorAll(".blog-page-slug-input")].map((input) => input.value.trim()).filter(Boolean);
+  const row = makePageRow({ slug: uniqueSlug("page", taken), title: "新页面", source: "" });
+  $("blog-pages").append(row);
+  blogDirty = true;
+  blankPagesMessage();
+  row.querySelector(".blog-page-slug-input").focus();
+};
+$("blog-form").onsubmit = async (event) => {
+  event.preventDefault();
+  if (siteBusy || !blogConfig) return;
+  const payload = blogPayload();
+  const checked = validateBlog(payload);
+  if (!checked.ok) { blogError(checked.error); return; }
+  payload.pages = checked.pages;
+  setSiteBusy(true);
+  blogError();
+  $("blog-state").textContent = "保存中…";
+  try {
+    const saved = await request("/admin/api/blog", { method: "POST", body: payload });
+    blogConfig = saved;
+    renderBlog(saved);
+    blogPreview();
+    $("blog-state").textContent = "已保存";
+  } catch (error) { blogError(error.message); $("blog-state").textContent = ""; }
+  finally { setSiteBusy(false); }
+};
+
+function renderAppearance() {
+  renderAccentSwatches(blogConfig.accents || [], blogConfig.accent);
+  for (const input of document.querySelectorAll('input[name="blog-theme"]')) input.checked = input.value === blogConfig.theme;
+  blogPreview();
+}
+
+function setSiteBusy(busy) {
+  siteBusy = busy;
+  $("accent-field").disabled = $("theme-field").disabled = busy;
+  for (const control of $("blog-form").querySelectorAll("input, textarea, button")) control.disabled = busy;
+}
+
+function loadSiteSettings() {
+  if (blogConfig || siteLoading) return siteLoading;
+  $("blog-state").textContent = $("appearance-state").textContent = "读取中…";
+  alertAt("appearance-error");
+  blogError();
+  // Coalesce rapid tab switches; never refill an already edited form.
+  siteLoading = request("/admin/api/blog").then((config) => {
+    blogConfig = config;
+    renderBlog(config);
+    renderAppearance();
+    $("blog-form").hidden = false;
+    setSiteBusy(false);
+    $("appearance-state").textContent = "全站生效";
+  }).catch((error) => {
+    alertAt("appearance-error", error.message);
+    blogError(error.message);
+    $("blog-state").textContent = $("appearance-state").textContent = "读取失败";
+  }).finally(() => { siteLoading = null; });
+  return siteLoading;
+}
+
+async function saveAppearance() {
+  if (siteBusy || !blogConfig) return;
+  const body = blogSettingsPayload({ ...blogConfig, accent: selectedAccent(), theme: selectedTheme() });
+  setSiteBusy(true);
+  alertAt("appearance-error");
+  $("appearance-state").textContent = "保存中…";
+  try {
+    blogConfig = await request("/admin/api/blog", { method: "POST", body });
+    if (blogConfig.theme === "auto") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = blogConfig.theme;
+    $("theme-sheet").href = `/theme.css?t=${Date.now()}`;
+    $("appearance-state").textContent = "已保存 · 全站生效";
+  } catch (error) {
+    // Roll back only the appearance controls, not a draft on the blog tab.
+    renderAppearance();
+    alertAt("appearance-error", error.message);
+    $("appearance-state").textContent = "保存失败";
+  } finally { setSiteBusy(false); }
+}
+
+// General preferences come from the shared server-side registry.
+let preferences, preferencesBusy = false;
+function renderPreferences(list, focusKey) {
+  const container = $("preference-list");
+  container.replaceChildren();
+  if (!list.length) container.append(el("p", "field-note", "暂无可调整选项"));
+  const groups = new Map();
+  let restoreFocus;
+  for (const pref of list) {
+    if (!groups.has(pref.section)) {
+      const group = el("div", "pref-group");
+      group.append(el("h3", "pref-group-title", pref.section));
+      groups.set(pref.section, group);
+      container.append(group);
+    }
+    const row = el("label", "pref-row");
+    const text = el("span", "pref-text");
+    text.append(el("strong", "", pref.label));
+    if (pref.note) text.append(el("small", "", pref.note));
+    if (pref.locked) text.append(el("small", "", pref.locked));
+    const toggle = el("input", "pref-toggle");
+    toggle.type = "checkbox";
+    toggle.setAttribute("role", "switch");
+    toggle.checked = Boolean(pref.value);
+    toggle.disabled = Boolean(pref.locked);
+    toggle.onchange = () => savePreference(pref.key, toggle.checked);
+    if (pref.key === focusKey) restoreFocus = toggle;
+    row.append(text, toggle);
+    groups.get(pref.section).append(row);
+  }
+  if (currentTab === "general") restoreFocus?.focus();
+}
+
+async function loadPreferences() {
+  if (preferences || preferencesBusy) return;
+  preferencesBusy = true;
+  alertAt("prefs-error");
+  $("prefs-state").textContent = "读取中…";
+  try {
+    preferences = await request("/admin/api/preferences");
+    renderPreferences(preferences);
+    $("prefs-state").textContent = "";
+  } catch (error) {
+    alertAt("prefs-error", error.message);
+    $("prefs-state").textContent = "读取失败";
+  } finally { preferencesBusy = false; }
+}
+
+async function savePreference(key, value) {
+  if (preferencesBusy) return;
+  preferencesBusy = true;
+  for (const toggle of $("preference-list").querySelectorAll("input")) toggle.disabled = true;
+  alertAt("prefs-error");
+  $("prefs-state").textContent = "保存中…";
+  try {
+    preferences = await request("/admin/api/preferences", { method: "POST", body: { values: { [key]: value } } });
+    $("prefs-state").textContent = "已保存";
+  } catch (error) {
+    alertAt("prefs-error", error.message);
+    $("prefs-state").textContent = "保存失败";
+  } finally {
+    preferencesBusy = false;
+    renderPreferences(preferences, key);
+  }
+}
+
+// Git actions remain explicit and report their result in this tab.
+let gitBusy = false, gitStatus;
+const gitLabels = { disabled: "本地目录", current: "已同步", dirty: "本地修改待处理", offline: "远端不可用", ahead: "本地提交待推送", changed: "远端已变化", blocked: "仓库状态异常" };
+function renderGit() {
+  if (gitStatus) {
+    $("git-state").textContent = gitLabels[gitStatus.state] || gitStatus.state;
+    $("git-branch").textContent = gitStatus.branch || "—";
+    $("git-head").textContent = gitStatus.head?.slice(0, 12) || "—";
+    $("git-remote").textContent = gitStatus.remoteHead?.slice(0, 12) || "—";
+  }
+  $("git-check").disabled = gitBusy;
+  $("git-pull").disabled = gitBusy || gitStatus?.state !== "changed";
+  $("git-push").disabled = gitBusy || !gitStatus?.canPush;
+}
+
+async function gitOperation(action = "check") {
+  if (gitBusy || publicationBusy || systemBusy) return;
+  gitBusy = true;
+  renderGit();
+  $("git-message").textContent = action === "check" ? "正在核对远端…" : "同步中…";
+  try {
+    const checking = action === "check";
+    gitStatus = await request(`/admin/api/git${checking ? "" : `/${action}`}`, { method: checking ? "GET" : "POST" });
+    $("git-message").textContent = gitStatus.warning || gitStatus.message;
+  } catch (error) {
+    $("git-message").textContent = error.message;
+    gitStatus = null;
+    $("git-state").textContent = "请重新检查";
+  } finally {
+    gitBusy = false;
+    renderGit();
+    if (action !== "check") {
+      // A pull may change both available paths and the revision of the active note.
+      notesLoaded = false;
+      clearPublication();
+      if (currentTab === "publication") loadPublicationTab();
+    }
+  }
+}
+$("git-check").onclick = () => gitOperation();
+$("git-pull").onclick = () => gitOperation("pull");
+$("git-push").onclick = () => gitOperation("push");
+
+// Publishing uses a fresh revision and Git HEAD for the selected note.
+let notesLoaded = false, notesLoading = false, publicationBusy = false;
+let publicationRequest = 0, publicationNote, publicationRecord;
+const noteQuery = (path) => `?${new URLSearchParams({ path })}`;
+function renderPublication() {
+  $("publication-controls").hidden = !publicationNote;
+  $("publication-note").disabled = publicationBusy || notesLoading || !notesLoaded;
+  $("publication-refresh").disabled = publicationBusy;
+  $("publication-enabled").disabled = publicationBusy || !publicationNote;
+  $("publication-enabled").checked = Boolean(publicationRecord?.enabled);
+  $("publication-date").disabled = $("publication-date-save").disabled = publicationBusy || !publicationRecord?.id;
+  const date = publicationRecord?.publishedAt ? new Date(publicationRecord.publishedAt) : null;
+  $("publication-date").value = date ? new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 19) : "";
+  const link = $("publication-link");
+  link.hidden = !(publicationRecord?.enabled && publicationRecord.url);
+  if (link.hidden) link.removeAttribute("href");
+  else link.href = publicationRecord.url;
+}
+
+function clearPublication() {
+  publicationRequest++;
+  publicationNote = publicationRecord = null;
+  renderPublication();
+}
+
+async function selectPublication(path) {
+  clearPublication();
+  const id = publicationRequest;
+  $("publication-status").textContent = path ? "读取发布状态…" : "";
+  if (!path) return;
+  try {
+    const [note, record] = await Promise.all([
+      request(`/admin/api/note${noteQuery(path)}`), request(`/admin/api/publication${noteQuery(path)}`),
+    ]);
+    if (id !== publicationRequest) return;
+    publicationNote = note;
+    publicationRecord = record;
+    $("publication-status").textContent = "";
+    renderPublication();
+  } catch (error) { if (id === publicationRequest) $("publication-status").textContent = error.message; }
+}
+
+async function loadPublicationTab() {
+  if (notesLoading || gitBusy || publicationBusy) return;
+  const selected = new URLSearchParams(location.search).get("note") || "";
+  if (notesLoaded) {
+    const select = $("publication-note");
+    if (select.value !== selected) {
+      select.value = selected;
+      if (select.selectedIndex < 0) select.value = "";
+      selectPublication(select.value);
+    }
+    return;
+  }
+  notesLoading = true;
+  renderPublication();
+  $("publication-status").textContent = "读取笔记列表…";
+  try {
+    const { notes } = await request("/admin/api/vault");
+    const select = $("publication-note");
+    select.replaceChildren(new Option("请选择笔记", ""));
+    for (const { path } of notes) select.add(new Option(path, path));
+    select.value = new URLSearchParams(location.search).get("note") || "";
+    if (select.selectedIndex < 0) select.value = "";
+    notesLoaded = true;
+    if (notes.length) void selectPublication(select.value);
+    else $("publication-status").textContent = "知识库中还没有笔记";
+  } catch (error) { $("publication-status").textContent = error.message; }
+  finally { notesLoading = false; renderPublication(); }
+}
+
+$("publication-note").onchange = () => {
+  const path = $("publication-note").value;
+  const url = new URL(location.href);
+  if (path) url.searchParams.set("note", path); else url.searchParams.delete("note");
+  history.replaceState(null, "", url);
+  renderTabLinks();
+  selectPublication(path);
+};
+
+async function updatePublication(enabled, date) {
+  if (publicationBusy || gitBusy || systemBusy || !publicationNote) { renderPublication(); return; }
+  const { path, revision, gitHead } = publicationNote;
+  publicationBusy = true;
+  renderPublication();
+  $("publication-status").textContent = "保存中…";
+  try {
+    publicationRecord = await request("/admin/api/publication", { method: "PUT", body: { path, enabled, publishedAt: date, revision, gitHead } });
+    $("publication-status").textContent = date ? "发布时间已保存" : enabled ? "已发布" : "已取消发布";
+  } catch (error) { $("publication-status").textContent = error.message; }
+  finally { publicationBusy = false; renderPublication(); }
+}
+$("publication-enabled").onchange = (event) => updatePublication(event.target.checked);
+$("publication-date-form").onsubmit = (event) => {
+  event.preventDefault();
+  if (!publicationRecord?.id) return;
+  const date = new Date($("publication-date").value);
+  if (!Number.isFinite(date.getTime()) || date.getTime() > Date.now() + 60000) {
+    $("publication-status").textContent = "发布时间不能晚于当前时间";
+    return;
+  }
+  updatePublication(publicationRecord.enabled, date.toISOString());
+};
+$("publication-refresh").onclick = async () => {
+  if (publicationBusy || gitBusy || notesLoading || systemBusy) return;
+  const path = $("publication-note").value;
+  clearPublication();
+  publicationBusy = true;
+  renderPublication();
+  $("publication-status").textContent = "更新中…";
+  let message = "公开副本已更新";
+  try { await request("/admin/api/publications/refresh", { method: "POST" }); }
+  catch (error) { message = error.message; }
+  finally {
+    if (path) await selectPublication(path);
+    publicationBusy = false;
+    renderPublication();
+    if (!$("publication-status").textContent) $("publication-status").textContent = message;
+  }
+};
+
+// Version and updates now live under System, not a separate Tools tab.
+let versionBusy = false, versionLoaded = false;
+function renderVersion(current) {
+  $("version-current").textContent = current.version === "dev"
+    ? "开发版本" : current.version;
+  if (current.commit && current.commit !== "unknown") $("version-current").textContent += ` (${current.commit.slice(0, 7)})`;
+}
+async function loadVersion() {
+  if (versionLoaded) return;
+  versionLoaded = true;
+  try { renderVersion(await request("/admin/api/version")); }
+  catch { versionLoaded = false; }
+}
+$("version-check").onclick = async () => {
+  if (versionBusy) return;
+  versionBusy = $("version-check").disabled = true;
+  $("version-install").hidden = $("version-link").hidden = $("version-notes-wrap").hidden = true;
+  $("version-state").textContent = "检查中…";
+  $("version-message").textContent = "";
+  $("version-latest").textContent = "—";
+  try {
+    const status = await request("/admin/api/update");
+    renderVersion(status.current);
+    $("version-latest").textContent = status.latest || "—";
+    if (status.url) {
+      const url = new URL(status.url, location.href);
+      if (url.protocol === "https:" && url.hostname === "github.com") {
+        $("version-link").href = url;
+        $("version-link").hidden = false;
+      }
+    }
+    $("version-notes").textContent = status.notes || "";
+    $("version-notes-wrap").hidden = !status.notes;
+    $("version-state").textContent = status.available ? "有新版本" : status.error ? "检查失败" : "已是最新";
+    $("version-install").hidden = !status.available || !context.canInstallUpdate;
+    $("version-message").textContent = status.error || (status.available ? context.canInstallUpdate ? "安装后会短暂重启服务。" : "当前运行模式不支持页面内安装。" : "");
+  } catch (error) {
+    $("version-state").textContent = "检查失败";
+    $("version-message").textContent = error.message;
+  } finally { versionBusy = $("version-check").disabled = false; }
+};
+$("version-install").onclick = async () => {
+  if (versionBusy || !canLeave() || !window.confirm("安装更新会重启服务，是否继续？")) return;
+  versionBusy = $("version-install").disabled = $("version-check").disabled = true;
+  $("version-state").textContent = "更新中…";
+  $("version-message").textContent = "正在下载并校验…";
+  try {
+    const result = await request("/admin/api/update/install", { method: "POST" });
+    await request("/admin/api/update/restart", { method: "POST" });
+    $("version-message").textContent = `${result.version} 已校验，正在重启…`;
+    // Sessions are held in memory; a restarted process will ask for login.
+    const deadline = Date.now() + 30000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1400));
+      try {
+        const res = await fetch("/admin/api/version", { cache: "no-store", signal: AbortSignal.timeout(2000) });
+        if (res.status === 401 || (res.ok && (await res.json()).version === result.version)) {
+          leaving = true;
+          location.reload();
+          return;
+        }
+      } catch { /* Listener may be unavailable during restart. */ }
+    }
+    throw new Error("在 30 秒内未确认新版本已启动，请检查服务日志");
+  } catch (error) {
+    $("version-state").textContent = "更新未完成";
+    $("version-message").textContent = error.message;
+  } finally { versionBusy = $("version-install").disabled = $("version-check").disabled = false; }
+};
+
+// Primary tabs change the address and history, not the page or its drafts.
+const tabs = [...document.querySelectorAll('.settings-tabs [role="tab"]')];
+let currentTab;
+function tabKey(tab) { return tab.id.slice(4); }
+function selectedTab() {
+  const params = new URLSearchParams(location.search);
+  if (context?.problem) return "system";
+  const key = params.get("tab");
+  return tabs.some((tab) => tabKey(tab) === key) ? key : "appearance";
+}
+function tabURL(key) {
+  const url = new URL(location.href);
+  url.searchParams.set("tab", key);
+  url.hash = "";
+  return url;
+}
+function renderTabLinks() { for (const tab of tabs) tab.href = tabURL(tabKey(tab)); }
+function showTab(key) {
+  currentTab = key;
+  for (const tab of tabs) {
+    const active = tabKey(tab) === key;
+    tab.setAttribute("aria-selected", String(active));
+    tab.tabIndex = active ? 0 : -1;
+    $(tab.getAttribute("aria-controls")).hidden = !active;
+  }
+  renderTabLinks();
+  if (key === "appearance" || key === "blog") loadSiteSettings();
+  if (key === "general") loadPreferences();
+  if (key === "publication") loadPublicationTab();
+  if (key === "system" && !context?.problem) loadVersion();
+}
+function navigateTab(tab) {
+  const key = tabKey(tab);
+  if (key !== currentTab || location.hash) history.pushState(null, "", tabURL(key));
+  showTab(key);
+}
+for (const tab of tabs) tab.onclick = (event) => {
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  if (context) navigateTab(tab);
+};
+document.querySelector(".settings-tabs").onkeydown = (event) => {
+  const active = tabs.filter((tab) => !tab.hidden);
+  const index = active.indexOf(event.target);
+  if (index < 0 || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) || !context) return;
+  event.preventDefault();
+  const next = event.key === "Home" ? 0 : event.key === "End" ? active.length - 1
+    : (index + (event.key === "ArrowRight" ? 1 : -1) + active.length) % active.length;
+  active[next].focus();
+  navigateTab(active[next]);
+};
+window.addEventListener("popstate", () => { if (context) showTab(selectedTab()); });
+
+function workInProgress() { return systemBusy || siteBusy || preferencesBusy || gitBusy || publicationBusy || versionBusy; }
+function canLeave() {
+  if (workInProgress()) { alertAt("settings-notice", "正在保存或同步，请稍候"); return false; }
+  return !(systemDirty || blogDirty) || window.confirm("还有未保存的设置，是否放弃修改？");
+}
+window.addEventListener("pageshow", (event) => { if (event.persisted) leaving = false; });
+window.addEventListener("beforeunload", (event) => {
+  if (!leaving && (systemDirty || blogDirty || workInProgress())) { event.preventDefault(); event.returnValue = ""; }
+});
+$("settings-return").onclick = (event) => {
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  if (!canLeave()) event.preventDefault();
+  else leaving = true;
+};
+$("settings-logout").onclick = async () => {
+  if (!canLeave()) return;
+  try { await request("/admin/api/logout", { method: "POST" }); leaving = true; location.assign("/admin/login"); }
+  catch (error) { alertAt("settings-notice", error.message); }
+};
+$("end-test-button").onclick = async () => {
+  if (!canLeave() || !window.confirm("结束测试会删除此次测试的数据，是否继续？")) return;
+  $("end-test-button").disabled = true;
+  try { await request("/admin/api/test/stop", { method: "POST" }); leaving = true; location.replace("about:blank"); }
+  catch (error) { alertAt("settings-notice", error.message); $("end-test-button").disabled = false; }
+};
 
 async function initialize() {
+  const returnPath = new URLSearchParams(location.search).get("return");
   try {
-    previous = await request(endpoint);
-    $("vault-path").value = previous.vault;
-    $("git-username").value = previous.username || "";
-    $("save-mode").textContent = previous.git ? "Git 同步" : "本地目录";
-    $("token-state").textContent = previous.tokenConfigured ? "已设置" : "未设置";
-    $("git-token").placeholder = previous.tokenConfigured ? "留空保留，填写替换" : "公开仓库可留空";
-    $("clear-token-label").hidden = !previous.tokenConfigured;
-    $("end-test-button").hidden = !previous.testMode;
-    updateSource();
-    $("settings-form").hidden = false;
-    $("save-settings").disabled = false;
-    document.querySelectorAll(".settings-section").forEach((section) => sections.observe(section));
-    if (previous.problem) error(previous.problem);
-  } catch (e) { error(e.message); }
-  finally { $("settings-loading").hidden = true; }
+    const url = new URL(returnPath || "/admin/", location.origin);
+    if (url.origin === location.origin && url.pathname === "/admin/") $("settings-return").href = url;
+  } catch { /* Invalid return URL; use the workspace link. */ }
+  try {
+    context = await request(endpoint);
+    $("end-test-button").hidden = !context.testMode;
+    if (context.managed) {
+      $("vault-path").value = context.vault;
+      $("git-username").value = context.username || "";
+      $("save-mode").textContent = context.git ? "Git 同步" : "本地目录";
+      $("token-state").textContent = context.tokenConfigured ? "已设置" : "未设置";
+      $("git-token").placeholder = context.tokenConfigured ? "留空保留，填写替换" : "公开仓库可留空";
+      $("clear-token-label").hidden = !context.tokenConfigured;
+      updateSource();
+      $("settings-form").hidden = $("save-settings").disabled = false;
+    } else {
+      $("settings-loading").textContent = "使用命令行管理知识库路径和管理员密码。";
+    }
+    if (context.problem) {
+      for (const tab of tabs) tab.hidden = tabKey(tab) !== "system";
+      $("system-version").hidden = true;
+      $("settings-return").hidden = true;
+      alertAt("settings-notice", context.problem);
+    }
+    showTab(selectedTab());
+  } catch (error) { alertAt("settings-notice", error.message); }
+  finally { $("settings-loading").hidden = context?.managed !== false; }
 }
 initialize();

@@ -218,14 +218,14 @@ func TestBlogConfigStaysOutOfTheVault(t *testing.T) {
 func TestAdminStaticAssetsAreReachable(t *testing.T) {
 	a, _, _ := publishFixture(t)
 	handler := testHandler(t, a)
-	for _, asset := range []string{"index.html", "app.js", "style.css", "graph.js", "graph-model.mjs", "force.js", "editor.js", "editor-model.mjs", "blog-model.mjs"} {
+	for _, asset := range []string{"index.html", "app.js", "style.css", "graph.js", "graph-model.mjs", "force.js", "editor.js", "editor-model.mjs", "blog-model.mjs", "settings.js", "settings.css"} {
 		w := editRequest(handler, "GET", "/admin/"+asset, nil)
 		if w.Code != 200 {
 			t.Errorf("%s: %d", asset, w.Code)
 		}
 	}
 	// Imports that are not allowlisted fail closed rather than leaking files.
-	if w := editRequest(handler, "GET", "/admin/settings.js", nil); w.Code != 404 {
+	if w := editRequest(handler, "GET", "/admin/settings.html", nil); w.Code != 404 {
 		t.Errorf("unlisted asset must 404, got %d", w.Code)
 	}
 }
@@ -422,10 +422,10 @@ func TestEveryPageLinksTheSharedTheme(t *testing.T) {
 	}
 }
 
-// TestBlogPanelOffersVisualPickers asserts the settings page shows colors as
+// TestAppearanceOffersVisualPickers asserts the settings page shows colors as
 // swatches with names instead of a hex-only dropdown.
-func TestBlogPanelOffersVisualPickers(t *testing.T) {
-	html, err := assets.ReadFile("static/index.html")
+func TestAppearanceOffersVisualPickers(t *testing.T) {
+	html, err := assets.ReadFile("static/settings.html")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -438,7 +438,7 @@ func TestBlogPanelOffersVisualPickers(t *testing.T) {
 			t.Errorf("panel missing visual picker markup: %q", want)
 		}
 	}
-	js, err := assets.ReadFile("static/app.js")
+	js, err := assets.ReadFile("static/settings.js")
 	if err != nil {
 		t.Fatal(err)
 	}

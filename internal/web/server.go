@@ -119,7 +119,11 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /admin/entry.css", func(w http.ResponseWriter, r *http.Request) { a.static(w, r, "entry.css") })
 	mux.HandleFunc("POST /admin/api/login", a.login)
 	a.themeRoutes(mux)
+	a.settingsRoutes(mux)
 	private.HandleFunc("POST /api/logout", a.logout)
+	private.HandleFunc("GET /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		respond(w, map[string]any{"managed": false, "canInstallUpdate": a.updateInstallEnabled()})
+	})
 	private.HandleFunc("GET /api/git", a.gitStatus)
 	private.HandleFunc("POST /api/git/pull", a.gitPull)
 	private.HandleFunc("POST /api/git/push", a.gitPush)
@@ -149,7 +153,7 @@ func (a *App) Handler() http.Handler {
 		if name == "" {
 			name = "index.html"
 		}
-		if name != "index.html" && name != "app.js" && name != "style.css" && name != "graph.js" && name != "graph-model.mjs" && name != "force.js" && name != "editor.js" && name != "editor-model.mjs" && name != "blog-model.mjs" {
+		if name != "index.html" && name != "app.js" && name != "style.css" && name != "graph.js" && name != "graph-model.mjs" && name != "force.js" && name != "editor.js" && name != "editor-model.mjs" {
 			http.NotFound(w, r)
 			return
 		}
@@ -158,6 +162,22 @@ func (a *App) Handler() http.Handler {
 	})
 	a.publicRoutes(mux)
 	return protect(mux)
+}
+
+// The same authenticated page serves both the workbench and setup recovery.
+func (a *App) settingsRoutes(mux *http.ServeMux) {
+	mux.Handle("GET /admin/settings", a.gate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		a.static(w, r, "settings.html")
+	})))
+	for _, file := range []string{"settings.js", "settings.css", "blog-model.mjs"} {
+		mux.HandleFunc("GET /admin/"+file, func(w http.ResponseWriter, r *http.Request) {
+			if !a.authenticated(r) {
+				fail(w, http.StatusUnauthorized, "请先登录后台")
+				return
+			}
+			a.static(w, r, file)
+		})
+	}
 }
 
 func protect(next http.Handler) http.Handler {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ACCENTS, THEMES, MAX_PAGES, slugify, uniqueSlug, validateBlog } from "../internal/web/static/blog-model.mjs";
+import { ACCENTS, THEMES, slugify, uniqueSlug, validateBlog, validatePage } from "../internal/web/static/blog-model.mjs";
 
 test("slugify produces a safe standalone path segment", () => {
   assert.equal(slugify("About Me"), "about-me");
@@ -16,10 +16,8 @@ test("validateBlog accepts a complete configuration", () => {
     title: "山间笔记",
     accent: ACCENTS[2],
     theme: "dark",
-    pages: [{ slug: "about", title: "关于", source: "# hi" }],
   });
-  assert.equal(result.ok, true);
-  assert.deepEqual(result.pages[0].slug, "about");
+  assert.deepEqual(result, { ok: true });
 });
 
 test("validateBlog rejects values the server would refuse", () => {
@@ -28,14 +26,14 @@ test("validateBlog rejects values the server would refuse", () => {
   assert.equal(validateBlog({ ...base, accent: "#123456" }).ok, false);
   assert.equal(validateBlog({ ...base, accent: "red;background:url(x)" }).ok, false);
   assert.equal(validateBlog({ ...base, theme: "sepia" }).ok, false);
-  assert.equal(validateBlog({ ...base, pages: [{ slug: "About Me", title: "t" }] }).ok, false);
-  assert.equal(validateBlog({ ...base, pages: [{ slug: "a", title: "t" }, { slug: "a", title: "u" }] }).ok, false);
-  assert.equal(validateBlog({ ...base, pages: [{ slug: "a", title: "" }] }).ok, false);
 });
 
-test("validateBlog enforces the page cap", () => {
-  const pages = Array.from({ length: MAX_PAGES + 1 }, (_, index) => ({ slug: `p${index}`, title: "t" }));
-  assert.equal(validateBlog({ title: "t", accent: ACCENTS[0], theme: "auto", pages }).ok, false);
+test("standalone page requires a title and URL-safe slug", () => {
+  assert.equal(validatePage({ slug: "about-me", title: "关于我" }), null);
+  assert.equal(validatePage({ slug: "about", title: " " }).field, "title");
+  for (const slug of ["About Me", "../about", "关于我", "", "a".repeat(65)]) {
+    assert.equal(validatePage({ slug, title: "关于我" }).field, "slug");
+  }
 });
 
 test("validateBlog only accepts the published palette and themes", () => {

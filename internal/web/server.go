@@ -131,7 +131,13 @@ func (a *App) Handler() http.Handler {
 	private.HandleFunc("PUT /api/publication", a.setPublication)
 	private.HandleFunc("POST /api/publications/refresh", a.refreshPublications)
 	private.HandleFunc("GET /api/blog", a.blogSettings)
-	private.HandleFunc("POST /api/blog", a.blogSettings)
+	private.HandleFunc("POST /api/blog", a.saveBlogSettings)
+	private.HandleFunc("GET /api/pages", a.listStandalonePages)
+	private.HandleFunc("POST /api/pages", a.createStandalonePage)
+	private.HandleFunc("POST /api/pages/preview", a.previewStandalonePage)
+	private.HandleFunc("GET /api/pages/{slug}", a.getStandalonePage)
+	private.HandleFunc("PUT /api/pages/{slug}", a.updateStandalonePage)
+	private.HandleFunc("DELETE /api/pages/{slug}", a.deleteStandalonePage)
 	private.HandleFunc("GET /api/version", func(w http.ResponseWriter, r *http.Request) { respond(w, version.Current()) })
 	private.HandleFunc("GET /api/update", a.updateStatus)
 	private.HandleFunc("POST /api/update/install", a.updateInstall)
@@ -153,7 +159,7 @@ func (a *App) Handler() http.Handler {
 		if name == "" {
 			name = "index.html"
 		}
-		if name != "index.html" && name != "app.js" && name != "style.css" && name != "graph.js" && name != "graph-model.mjs" && name != "force.js" && name != "editor.js" && name != "editor-model.mjs" {
+		if name != "index.html" && name != "app.js" && name != "style.css" && name != "graph.js" && name != "graph-model.mjs" && name != "force.js" {
 			http.NotFound(w, r)
 			return
 		}
@@ -169,7 +175,7 @@ func (a *App) settingsRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /admin/settings", a.gate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		a.static(w, r, "settings.html")
 	})))
-	for _, file := range []string{"settings.js", "settings.css", "blog-model.mjs"} {
+	for _, file := range []string{"settings.js", "settings.css", "blog-model.mjs", "pages.js", "editor.js", "editor-model.mjs"} {
 		mux.HandleFunc("GET /admin/"+file, func(w http.ResponseWriter, r *http.Request) {
 			if !a.authenticated(r) {
 				fail(w, http.StatusUnauthorized, "请先登录后台")

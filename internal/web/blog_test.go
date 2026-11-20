@@ -1,9 +1,7 @@
 package web
 
 import (
-	"bytes"
 	"encoding/json"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,7 +39,7 @@ func TestBlogConfigDefaultsAndRoundTrip(t *testing.T) {
 		t.Fatalf("GET /admin/api/blog: %d %s", response.Code, response.Body)
 	}
 	if current.Title != publication.DefaultBlog().Title || current.Accent != publication.Accents[0] || current.Theme != "auto" {
-		t.Fatalf("unexpected defaults: %+v", current.Blog)
+		t.Fatalf("unexpected defaults: %+v", current.BlogMetadata)
 	}
 	if len(current.Accents) != len(publication.Accents) || len(current.Themes) != 3 {
 		t.Fatal("pickers must receive the server-side palette and theme list")
@@ -54,31 +52,21 @@ func TestBlogConfigDefaultsAndRoundTrip(t *testing.T) {
 		"accent":      publication.Accents[2],
 		"theme":       "dark",
 		"footer":      "© 山间笔记",
-		"pages": []map[string]any{
-			{"slug": "about", "title": "关于本站", "source": "# 关于\n\n这是一个**独立页面**。"},
-		},
 	}
 	response, saved := blogRequest(t, a, "POST", payload)
 	if response.Code != 200 {
 		t.Fatalf("POST: %d %s", response.Code, response.Body)
 	}
 	if saved.Title != "山间笔记" || saved.Accent != publication.Accents[2] || saved.Theme != "dark" {
-		t.Fatalf("unexpected saved config: %+v", saved.Blog)
+		t.Fatalf("unexpected saved config: %+v", saved.BlogMetadata)
 	}
-	if len(saved.Pages) != 1 || saved.Pages[0].Slug != "about" {
-		t.Fatalf("page not stored: %+v", saved.Pages)
-	}
-	if saved.Pages[0].CreatedAt.IsZero() || saved.Pages[0].UpdatedAt.IsZero() {
-		t.Fatal("page timestamps must be filled in")
-	}
-
 	// Restart from the same data directory: the settings must survive.
 	reopened, err := publication.Open(data, filepath.Join(filepath.Dir(data), "notes"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	reloaded := reopened.Blog()
-	if reloaded.Title != "山间笔记" || reloaded.Theme != "dark" || len(reloaded.Pages) != 1 {
+	if reloaded.Title != "山间笔记" || reloaded.Theme != "dark" {
 		t.Fatalf("settings did not persist: %+v", reloaded)
 	}
 }
@@ -93,9 +81,8 @@ func TestBlogConfigRejectsInvalidValues(t *testing.T) {
 		{"unlisted accent", map[string]any{"title": "x", "accent": "#123456", "theme": "auto"}},
 		{"css injection", map[string]any{"title": "x", "accent": "red;background:url(x)", "theme": "auto"}},
 		{"unknown theme", map[string]any{"title": "x", "accent": publication.Accents[0], "theme": "sepia"}},
-		{"bad slug", map[string]any{"title": "x", "accent": publication.Accents[0], "theme": "auto", "pages": []map[string]any{{"slug": "About Me", "title": "t"}}}},
-		{"duplicate slug", map[string]any{"title": "x", "accent": publication.Accents[0], "theme": "auto", "pages": []map[string]any{{"slug": "a", "title": "t"}, {"slug": "a", "title": "u"}}}},
-		{"missing page title", map[string]any{"title": "x", "accent": publication.Accents[0], "theme": "auto", "pages": []map[string]any{{"slug": "a", "title": " "}}}},
+		{"bulk pages", map[string]any{"title": "x", "pages": []any{}}},
+		{"source", map[string]any{"title": "x", "source": "not site metadata"}},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -108,7 +95,7 @@ func TestBlogConfigRejectsInvalidValues(t *testing.T) {
 	// A rejected save must leave the previous configuration untouched.
 	_, current := blogRequest(t, a, "GET", nil)
 	if current.Title != publication.DefaultBlog().Title {
-		t.Fatalf("failed saves changed the configuration: %+v", current.Blog)
+		t.Fatalf("failed saves changed the configuration: %+v", current.BlogMetadata)
 	}
 }
 
@@ -122,12 +109,14 @@ func TestPublicSiteUsesBlogConfiguration(t *testing.T) {
 		"accent":      publication.Accents[1],
 		"theme":       "light",
 		"footer":      "CUSTOM_FOOTER",
-		"pages": []map[string]any{
-			{"slug": "about", "title": "ABOUT_PAGE", "source": "## ABOUT_SECTION\n\nPage body with [[first|a link]]."},
-		},
 	}
 	if response, _ := blogRequest(t, a, "POST", payload); response.Code != 200 {
 		t.Fatalf("save blog: %d %s", response.Code, response.Body)
+	}
+
+	pageRequest := map[string]string{"slug": "about", "title": "ABOUT_PAGE", "source": "## ABOUT_SECTION\n\nPage body with [[first|a link]]."}
+	if w := editRequest(testHandler(t, a), "POST", "/admin/api/pages", pageRequest); w.Code != 201 {
+		t.Fatalf("create page: %d %s", w.Code, w.Body.String())
 	}
 
 	index := editRequest(testHandler(t, a), "GET", "/", nil)
@@ -194,7 +183,7 @@ func TestBlogConfigStaysOutOfTheVault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response, _ := blogRequest(t, a, "POST", map[string]any{"title": "x", "accent": publication.Accents[0], "theme": "auto", "pages": []map[string]any{{"slug": "about", "title": "t", "source": "body"}}}); response.Code != 200 {
+	if response, _ := blogRequest(t, a, "POST", map[string]any{"title": "x", "accent": publication.Accents[0], "theme": "auto"}); response.Code != 200 {
 		t.Fatalf("save: %d %s", response.Code, response.Body)
 	}
 	after, err := os.ReadDir(dir)
@@ -449,42 +438,20 @@ func TestAppearanceOffersVisualPickers(t *testing.T) {
 	}
 }
 
-// TestBlogSettingsAcceptRoundTrippedResponse reproduces the failing flow: the
-// panel loads the configuration, changes one field and posts the whole payload
-// back. The GET response includes read-only extras, so the handler must not
-// reject them as unknown fields.
-func TestBlogSettingsAcceptRoundTrippedResponse(t *testing.T) {
+func TestBlogSettingsNeverReturnPageContent(t *testing.T) {
 	a, _, _ := publishFixture(t)
 	handler := testHandler(t, a)
-
-	loaded := editRequest(handler, "GET", "/admin/api/blog", nil)
-	if loaded.Code != 200 {
-		t.Fatalf("GET: %d %s", loaded.Code, loaded.Body)
+	if w := editRequest(handler, "POST", "/admin/api/pages", map[string]string{"slug": "about", "title": "Standalone", "source": "SENSITIVE_PAGE_BODY"}); w.Code != 201 {
+		t.Fatal(w.Body.String())
 	}
-	var config map[string]any
-	if err := json.Unmarshal(loaded.Body.Bytes(), &config); err != nil {
-		t.Fatal(err)
-	}
-	// The response carries read-only keys the client cannot send back blindly.
-	for _, extra := range []string{"accents", "themes", "vault", "preferences"} {
-		if _, ok := config[extra]; !ok {
-			t.Fatalf("expected %s in the GET response", extra)
+	for _, method := range []string{"GET", "POST"} {
+		w, _ := blogRequest(t, a, method, map[string]string{"title": "Site metadata"})
+		if w.Code != 200 || strings.Contains(w.Body, `"pages"`) || strings.Contains(w.Body, `"source"`) || strings.Contains(w.Body, "SENSITIVE_PAGE_BODY") {
+			t.Fatalf("site metadata endpoint: %d %s", w.Code, w.Body)
 		}
 	}
-
-	config["accent"] = publication.Accents[1]
-	body, _ := json.Marshal(config)
-	r := httptest.NewRequest("POST", "/admin/api/blog", bytes.NewReader(body))
-	r.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, r)
-	if w.Code != 200 {
-		t.Fatalf("round-tripped save failed: %d %s", w.Code, w.Body)
-	}
-
-	_, current := blogRequest(t, a, "GET", nil)
-	if current.Accent != publication.Accents[1] {
-		t.Fatalf("accent not saved: %s", current.Accent)
+	if w := editRequest(handler, "GET", "/admin/api/pages/about", nil); w.Code != 200 || !strings.Contains(w.Body.String(), "SENSITIVE_PAGE_BODY") {
+		t.Fatal("saving metadata erased the standalone page")
 	}
 }
 

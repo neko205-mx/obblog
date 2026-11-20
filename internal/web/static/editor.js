@@ -14,8 +14,8 @@ async function jsonRequest(url, options) {
 }
 
 export class NoteEditor {
-  constructor({ onChange, onSaved, onUploaded, onClose, notify, notes, gitMode }) {
-    Object.assign(this, { onChange, onSaved, onUploaded, onClose, notify, notes, gitMode });
+  constructor({ onChange, onSaved, onUploaded, onClose, notify, notes, gitMode, page }) {
+    Object.assign(this, { onChange, onSaved, onUploaded, onClose, notify, notes, gitMode, page });
     this.active = false;
     this.saving = false;
     this.uploading = false;
@@ -27,40 +27,43 @@ export class NoteEditor {
     this.textarea.addEventListener("click", () => this.suggestions());
     this.textarea.addEventListener("compositionstart", () => { this.composing = true; this.hideSuggestions(); });
     this.textarea.addEventListener("compositionend", () => { this.composing = false; this.input(); });
-    this.textarea.addEventListener("paste", event => {
-      const files = imageFiles(event.clipboardData);
-      if (!files.length) return;
-      event.preventDefault();
-      this.uploadImages(files, true);
-    });
-    this.textarea.addEventListener("dragover", event => {
-      if (!Array.from(event.dataTransfer?.types || []).includes("Files")) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = this.busy || !navigator.onLine ? "none" : "copy";
-      this.textarea.classList.add("image-drop-target");
-    });
-    this.textarea.addEventListener("dragleave", () => this.textarea.classList.remove("image-drop-target"));
-    this.textarea.addEventListener("drop", event => {
-      this.textarea.classList.remove("image-drop-target");
-      if (!Array.from(event.dataTransfer?.types || []).includes("Files")) return;
-      event.preventDefault();
-      const files = imageFiles(event.dataTransfer);
-      if (files.length) this.uploadImages(files);
-      else this.notify("请选择图片文件");
-    });
-    $("insert-image").onclick = () => $("image-files").click();
-    $("image-files").onchange = event => {
-      this.uploadImages(Array.from(event.target.files));
-      event.target.value = "";
-    };
+    if (!page) {
+      this.textarea.addEventListener("paste", event => {
+        const files = imageFiles(event.clipboardData);
+        if (!files.length) return;
+        event.preventDefault();
+        this.uploadImages(files, true);
+      });
+      this.textarea.addEventListener("dragover", event => {
+        if (!Array.from(event.dataTransfer?.types || []).includes("Files")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = this.busy || !navigator.onLine ? "none" : "copy";
+        this.textarea.classList.add("image-drop-target");
+      });
+      this.textarea.addEventListener("dragleave", () => this.textarea.classList.remove("image-drop-target"));
+      this.textarea.addEventListener("drop", event => {
+        this.textarea.classList.remove("image-drop-target");
+        if (!Array.from(event.dataTransfer?.types || []).includes("Files")) return;
+        event.preventDefault();
+        const files = imageFiles(event.dataTransfer);
+        if (files.length) this.uploadImages(files);
+        else this.notify("请选择图片文件");
+      });
+      $("insert-image").onclick = () => $("image-files").click();
+      $("image-files").onchange = event => {
+        this.uploadImages(Array.from(event.target.files));
+        event.target.value = "";
+      };
+    }
     $("save-note").onclick = () => this.save();
     $("close-editor").onclick = () => this.onClose();
     $("editor-preview-toggle").onclick = () => {
       const preview = $("editor-view").classList.toggle("preview-only");
       $("editor-preview-toggle").setAttribute("aria-pressed", String(preview));
-      $("editor-preview-toggle").textContent = preview ? "返回编辑" : "展开预览";
+      $("editor-preview-toggle").textContent = preview ? "返回编辑" : this.page ? "仅看预览" : "展开预览";
     };
-    $("editor-path").addEventListener("input", () => this.schedulePreview());
+    $("editor-path").addEventListener("input", () => { if (page) this.status(); this.schedulePreview(); });
+    if (page) $("page-title").addEventListener("input", () => { this.status(); this.schedulePreview(); });
     for (const button of document.querySelectorAll("[data-format]")) button.onclick = () => this.format(button.dataset.format);
     $("show-server-note").onclick = () => this.showServer();
     $("copy-draft").onclick = async () => {
@@ -71,14 +74,14 @@ export class NoteEditor {
       if (event.target.closest("a")) { event.preventDefault(); this.notify("退出编辑后可打开链接"); }
     });
     window.addEventListener("beforeunload", (event) => {
-      if (this.active && (this.draft.dirty || this.busy)) { event.preventDefault(); event.returnValue = ""; }
+      if (!page && (this.dirty || this.busy)) { event.preventDefault(); event.returnValue = ""; }
     });
     window.addEventListener("online", () => this.status());
     window.addEventListener("offline", () => this.status());
   }
 
   get path() { return this.draft?.path; }
-  get dirty() { return this.active && this.draft.dirty; }
+  get dirty() { return this.active && (this.draft.dirty || Boolean(this.page?.dirtyMetadata())); }
   get busy() { return this.saving || this.uploading; }
 
   open(note, isNew = false) {
@@ -91,13 +94,14 @@ export class NoteEditor {
     this.location = location.href;
     this.textarea.value = this.draft.text;
     $("editor-path").value = note.path;
-    $("editor-path").readOnly = !isNew;
-    $("editor-path").title = isNew ? "可修改新笔记路径，目标目录必须已经存在" : "不支持重命名";
+    $("editor-path").readOnly = !this.page && !isNew;
+    $("editor-path").title = this.page ? "小写字母、数字和连字符" : isNew ? "可修改新笔记路径，目标目录必须已经存在" : "不支持重命名";
     $("editor-conflict").hidden = true;
     $("server-version").hidden = true;
     $("server-version").textContent = "";
     $("editor-view").classList.remove("preview-only");
-    $("editor-preview-toggle").textContent = "展开预览";
+    $("editor-preview-toggle").textContent = this.page ? "仅看预览" : "展开预览";
+    $("editor-preview").replaceChildren();
     $("editor-preview-toggle").setAttribute("aria-pressed", "false");
     this.updateLines();
     this.status();
@@ -118,11 +122,12 @@ export class NoteEditor {
     const offline = !navigator.onLine;
     this.textarea.readOnly = offline || this.busy;
     $("editor-path").disabled = offline || this.busy;
-    $("save-note").disabled = offline || this.busy || !this.draft.dirty;
-    $("insert-image").disabled = offline || this.busy;
-    $("save-note").textContent = this.saving ? "保存中…" : this.gitMode?.() ? "保存并推送" : "保存到本地";
+    $("save-note").disabled = offline || this.busy || !this.dirty;
+    if (this.page) $("page-title").disabled = offline || this.busy;
+    else $("insert-image").disabled = offline || this.busy;
+    $("save-note").textContent = this.saving ? "保存中…" : this.page ? "保存并发布" : this.gitMode?.() ? "保存并推送" : "保存到本地";
     for (const button of document.querySelectorAll("[data-format]")) button.disabled = offline || this.busy;
-    const label = this.uploading ? "正在上传图片…" : offline ? "离线，编辑已暂停" : message || this.warning || (this.draft.dirty ? "未保存" : this.synced ? "已保存并推送" : "已载入");
+    const label = this.uploading ? "正在上传图片…" : offline ? "离线，编辑已暂停" : message || this.warning || (this.dirty ? "未保存" : this.synced ? "已保存并推送" : "已载入");
     $("editor-status").textContent = label;
     $("editor-status").title = label;
     $("editor-status").dataset.state = offline ? "error" : kind;
@@ -158,14 +163,18 @@ export class NoteEditor {
     this.previewController = new AbortController();
     $("editor-preview-state").textContent = "更新预览…";
     try {
-      const result = await jsonRequest("/admin/api/preview", {
+      const result = await jsonRequest(this.page ? "/admin/api/pages/preview" : "/admin/api/preview", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: $("editor-path").value, source: this.draft.source }), signal: this.previewController.signal,
+        body: JSON.stringify(this.page ? this.page.input(this.draft.source) : { path: $("editor-path").value, source: this.draft.source }), signal: this.previewController.signal,
       });
       if (!this.active || id !== this.previewID) return;
       // Preview uses the same safe Markdown renderer as the normal reading view.
       $("editor-preview").innerHTML = result.html;
-      if (result.properties) {
+      if (this.page) {
+        const title = document.createElement("h1");
+        title.textContent = $("page-title").value.trim() || "未命名页面";
+        $("editor-preview").prepend(title);
+      } else if (result.properties) {
         const properties = document.createElement("pre");
         properties.className = "editor-property-preview";
         properties.textContent = result.properties;
@@ -174,36 +183,40 @@ export class NoteEditor {
       $("editor-preview-state").textContent = "实时预览";
     } catch (error) {
       if (error.name === "AbortError" || id !== this.previewID) return;
-      $("editor-preview-state").textContent = "预览加载失败";
+      $("editor-preview-state").textContent = error.message || "预览加载失败";
     }
   }
 
   async save() {
     if (!this.active || this.busy || !navigator.onLine) return false;
-    if (!this.draft.dirty) return true;
+    if (!this.dirty) return true;
     const submitted = this.draft.submission($("editor-path").value.trim());
     if (this.gitMode?.()) submitted.gitHead = this.gitHead;
-    if (new TextEncoder().encode(submitted.source).length > 8 * 1024 * 1024) { this.status("超过 8 MiB，未保存", "error"); return false; }
+    const maximum = this.page ? 2 : 8;
+    if (new TextEncoder().encode(submitted.source).length > maximum * 1024 * 1024) { this.status(`超过 ${maximum} MiB，未保存`, "error"); return false; }
+    if (this.page && !this.page.validate()) return false;
     this.saving = true;
     this.hideSuggestions();
     this.status();
     try {
-      const saved = await jsonRequest("/admin/api/note", {
-        method: this.draft.isNew ? "POST" : "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(submitted),
+      const endpoint = this.page ? `/admin/api/pages${this.draft.isNew ? "" : `/${encodeURIComponent(this.path)}`}` : "/admin/api/note";
+      const body = this.page ? { ...this.page.input(submitted.source), ...(!this.draft.isNew && { revision: this.draft.revision }) } : submitted;
+      const result = await jsonRequest(endpoint, {
+        method: this.draft.isNew ? "POST" : "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       });
+      const saved = this.page ? { ...result, path: result.slug } : result;
       const previousPath = this.draft.path;
       this.draft.accept(saved, submitted);
       this.gitHead = saved.gitHead || "";
       this.warning = saved.warning || "";
       this.synced = saved.synced === true;
       $("editor-path").value = saved.path;
-      $("editor-path").readOnly = true;
-      $("editor-path").title = "不支持重命名";
+      if (!this.page) { $("editor-path").readOnly = true; $("editor-path").title = "不支持重命名"; }
       $("editor-conflict").hidden = true;
       $("server-version").hidden = true;
       try { await this.onSaved?.(saved, submitted.source, previousPath); }
-      catch { this.notify("笔记已保存，但目录刷新失败，请稍后手动刷新"); }
-      this.status(saved.warning || (saved.synced ? "已保存并推送" : `已保存到本地 ${new Date(saved.modified).toLocaleTimeString("zh-CN")}`), saved.warning ? "error" : "");
+      catch { this.notify(this.page ? "页面已保存，但列表刷新失败，请稍后手动刷新" : "笔记已保存，但目录刷新失败，请稍后手动刷新"); }
+      this.status(this.page ? "已保存并发布" : saved.warning || (saved.synced ? "已保存并推送" : `已保存到本地 ${new Date(saved.modified).toLocaleTimeString("zh-CN")}`), saved.warning ? "error" : "");
       if (saved.warning) this.notify(saved.warning);
       return !saved.warning;
     } catch (error) {
@@ -262,7 +275,8 @@ export class NoteEditor {
 
   async showServer() {
     try {
-      const note = await jsonRequest(`/admin/api/note?${new URLSearchParams({ path: this.draft.path })}`);
+      const endpoint = this.page ? `/admin/api/pages/${encodeURIComponent(this.path)}` : `/admin/api/note?${new URLSearchParams({ path: this.path })}`;
+      const note = await jsonRequest(endpoint);
       $("server-version").textContent = note.source;
       $("server-version").hidden = false;
     } catch (error) { this.notify(error.message); }
@@ -277,7 +291,7 @@ export class NoteEditor {
   async mayLeave(forcePrompt = false) {
     if (!this.active) return true;
     if (this.busy) { this.notify(this.uploading ? "正在上传图片，请稍后再切换" : "正在保存，请稍后再切换"); return false; }
-    if (!this.draft.dirty) return true;
+    if (!this.dirty) return true;
     if (!forcePrompt && this.guardDrafts === false) return true;
     const result = await this.askUnsaved();
     if (result === "discard") return true;
@@ -348,7 +362,13 @@ export class NoteEditor {
     if (this.textarea.readOnly) return;
     const start = this.textarea.selectionStart, end = this.textarea.selectionEnd;
     const selection = this.textarea.value.slice(start, end);
-    const text = kind === "bold" ? `**${selection || "加粗文字"}**` : kind === "wiki" ? `[[${selection}]]` : `- ${selection || "列表项"}`;
+    const formats = {
+      bold: `**${selection || "加粗文字"}**`, wiki: `[[${selection}]]`, list: `- ${selection || "列表项"}`,
+      heading: `## ${selection || "章节标题"}`, link: `[${selection || "链接名称"}](https://example.com/)`,
+      image: `![${selection || "图片说明"}](https://example.com/image.png)`,
+    };
+    const text = formats[kind];
+    if (!text) return;
     this.textarea.setRangeText(text, start, end, "end");
     this.textarea.focus();
     if (kind === "wiki") this.textarea.setSelectionRange(start + 2, start + 2 + selection.length);

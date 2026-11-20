@@ -14,7 +14,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -37,27 +36,24 @@ type Article struct {
 	Assets      map[string]string       `json:"assets"`
 }
 
-// Blog is the site-level presentation of the public index. It is stored beside
-// the publication records so a blog stays configured for one vault.
-type Blog struct {
+// BlogMetadata is the editable presentation of the site. Page edits are a
+// separate operation and never pass through the site settings request.
+type BlogMetadata struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	Author      string `json:"author"`
 	// Accent is a lowercase #rrggbb color chosen from a fixed palette.
 	Accent string `json:"accent"`
 	// Theme is "light", "dark" or "auto" (follow the reader's preference).
-	Theme  string      `json:"theme"`
-	Footer string      `json:"footer"`
-	Pages  []*BlogPage `json:"pages"`
+	Theme  string `json:"theme"`
+	Footer string `json:"footer"`
 }
 
-// BlogPage is a standalone Markdown page that is rendered at /pages/<slug>.
-type BlogPage struct {
-	Slug      string    `json:"slug"`
-	Title     string    `json:"title"`
-	Source    string    `json:"source"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+// Blog includes standalone pages for persistence and public navigation.
+// Embedding BlogMetadata preserves the flat blog object in publications.json.
+type Blog struct {
+	BlogMetadata
+	Pages []*BlogPage `json:"pages"`
 }
 
 type diskState struct {
@@ -496,7 +492,7 @@ func (s *Store) OpenAsset(id, blob string) (*os.File, string, error) {
 
 // DefaultBlog is what a fresh installation serves before anything is configured.
 func DefaultBlog() *Blog {
-	return &Blog{Title: "OB Journal", Description: "文章与笔记", Author: "", Accent: "#406c50", Theme: "auto", Footer: "OB Journal", Pages: []*BlogPage{}}
+	return &Blog{BlogMetadata: BlogMetadata{Title: "OB Journal", Description: "文章与笔记", Accent: "#406c50", Theme: "auto", Footer: "OB Journal"}, Pages: []*BlogPage{}}
 }
 
 // Accents is the fixed palette offered by the settings page. Arbitrary values
@@ -506,15 +502,9 @@ var Accents = []string{"#406c50", "#2f6f8f", "#8a5a3b", "#7a4b6d", "#3f5d7d", "#
 var themes = map[string]bool{"light": true, "dark": true, "auto": true}
 
 const (
-	maxBlogTitle  = 120
-	maxBlogText   = 400
-	maxBlogSlug   = 64
-	maxBlogPages  = 12
-	maxBlogSource = 2 << 20
+	maxBlogTitle = 120
+	maxBlogText  = 400
 )
-
-// SlugPattern is shared with the web layer to validate /pages/<slug> links.
-var SlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 func trimLimit(value string, limit int) string {
 	value = strings.TrimSpace(value)
@@ -524,10 +514,10 @@ func trimLimit(value string, limit int) string {
 	return value
 }
 
-func normalizeBlog(b Blog) (*Blog, error) {
+func normalizeBlogMetadata(b BlogMetadata) (BlogMetadata, error) {
 	b.Title = trimLimit(b.Title, maxBlogTitle)
 	if b.Title == "" {
-		return nil, errors.New("博客标题不能为空")
+		return BlogMetadata{}, errors.New("博客标题不能为空")
 	}
 	b.Description = trimLimit(b.Description, maxBlogText)
 	b.Author = trimLimit(b.Author, maxBlogTitle)
@@ -544,19 +534,29 @@ func normalizeBlog(b Blog) (*Blog, error) {
 		}
 	}
 	if !valid {
-		return nil, errors.New("无效的博客主题色")
+		return BlogMetadata{}, errors.New("无效的博客主题色")
 	}
 	b.Theme = strings.ToLower(strings.TrimSpace(b.Theme))
 	if b.Theme == "" {
 		b.Theme = "auto"
 	}
 	if !themes[b.Theme] {
-		return nil, errors.New("无效的博客配色模式")
+		return BlogMetadata{}, errors.New("无效的博客配色模式")
 	}
+	return b, nil
+}
+
+// Loading retains the original on-disk normalization for existing pages.
+func normalizeBlog(b Blog) (*Blog, error) {
+	metadata, err := normalizeBlogMetadata(b.BlogMetadata)
+	if err != nil {
+		return nil, err
+	}
+	b.BlogMetadata = metadata
 	if b.Pages == nil {
 		b.Pages = []*BlogPage{}
 	}
-	if len(b.Pages) > maxBlogPages {
+	if len(b.Pages) > PageLimit {
 		return nil, errors.New("独立页面数量超出限制")
 	}
 	seen := map[string]bool{}
@@ -565,7 +565,7 @@ func normalizeBlog(b Blog) (*Blog, error) {
 			return nil, errors.New("无效的独立页面")
 		}
 		page.Slug = strings.ToLower(strings.TrimSpace(page.Slug))
-		if len(page.Slug) > maxBlogSlug || !SlugPattern.MatchString(page.Slug) || seen[page.Slug] {
+		if !validPageSlug(page.Slug) || seen[page.Slug] {
 			return nil, errors.New("独立页面的短地址必须是小写字母、数字和连字符，且不能重复")
 		}
 		seen[page.Slug] = true
@@ -573,7 +573,7 @@ func normalizeBlog(b Blog) (*Blog, error) {
 		if page.Title == "" {
 			return nil, errors.New("独立页面标题不能为空")
 		}
-		if len(page.Source) > maxBlogSource {
+		if len(page.Source) > MaxPageSource {
 			return nil, errors.New("独立页面内容超过 2 MiB")
 		}
 		if page.CreatedAt.IsZero() {
@@ -609,32 +609,29 @@ func (s *Store) Blog() *Blog {
 	return cloneBlog(s.blog)
 }
 
-// SetBlog replaces the site configuration. The pages list is authoritative: a
-// page omitted from the request is removed.
-func (s *Store) SetBlog(b Blog) (*Blog, error) {
-	cleaned, err := normalizeBlog(b)
+// Metadata returns site settings without collecting page content.
+func (s *Store) Metadata() BlogMetadata {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.blog.BlogMetadata
+}
+
+// ErrInvalidBlogMetadata identifies invalid site settings independently of
+// filesystem errors.
+var ErrInvalidBlogMetadata = errors.New("无效的博客配置")
+
+// SetBlog replaces site metadata while preserving the current pages under the
+// same lock as page writes and article publication.
+func (s *Store) SetBlog(b BlogMetadata) (BlogMetadata, error) {
+	cleaned, err := normalizeBlogMetadata(b)
 	if err != nil {
-		return nil, err
+		return BlogMetadata{}, fmt.Errorf("%w: %v", ErrInvalidBlogMetadata, err)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.persist(s.articles, cleaned, s.gitHead); err != nil {
-		return nil, err
+	next := &Blog{BlogMetadata: cleaned, Pages: s.blog.Pages}
+	if err := s.persist(s.articles, next, s.gitHead); err != nil {
+		return BlogMetadata{}, err
 	}
-	return cloneBlog(cleaned), nil
+	return cleaned, nil
 }
-
-// Page finds one standalone page by slug.
-func (s *Store) Page(slug string) *BlogPage {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, page := range s.blog.Pages {
-		if page.Slug == slug {
-			copied := *page
-			return &copied
-		}
-	}
-	return nil
-}
-
-func PageURL(slug string) string { return "/pages/" + slug }

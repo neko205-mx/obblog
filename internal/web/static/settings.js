@@ -1,4 +1,5 @@
-import { MAX_PAGES, slugify, uniqueSlug, validateBlog } from "./blog-model.mjs";
+import { validateBlog } from "./blog-model.mjs";
+import { initPages } from "./pages.js";
 
 const $ = (id) => document.getElementById(id);
 const endpoint = "/admin/api/settings";
@@ -59,7 +60,7 @@ $("settings-form").onsubmit = async (event) => {
   if (password !== confirmation) { error("两次密码输入不一致"); $("confirm-password").focus(); return; }
   const input = { mode: mode(), vault: $("vault-path").value.trim(), repository: $("repository-url").value.trim(), branch: $("repository-branch").value.trim(), username: $("git-username").value.trim(), token: $("git-token").value.trim(), clearToken: $("clear-token").checked, password, confirmation };
   if (input.mode === "clone" && !input.token && context.tokenConfigured && !input.clearToken) { error("更换仓库请重新填写 Token，公开仓库请勾选清除已保存 Token"); $("git-token").focus(); return; }
-  if (blogDirty && !window.confirm("保存系统设置会退出登录，是否放弃未保存的博客设置？")) return;
+  if ((blogDirty || pages.dirty) && !window.confirm("保存系统设置会退出登录，是否放弃未保存的博客或页面修改？")) return;
   systemBusy = true;
   const controls = [...$("settings-form").querySelectorAll("input,button")].map((control) => [control, control.disabled]);
   controls.forEach(([control]) => { control.disabled = true; });
@@ -187,70 +188,12 @@ function blogPreview() {
   $("blog-preview-text").textContent = author ? `${title} · ${author}` : title;
 }
 
-function makePageRow(page = {}) {
-  const slug = page.slug || "";
-  const row = el("div", "blog-page");
-  row.dataset.createdAt = page.createdAt || "";
-  row.dataset.updatedAt = page.updatedAt || "";
-  const head = el("div", "blog-page-head");
-  const slugWrap = el("label", "blog-page-slug");
-  slugWrap.append(el("span", "", "短地址"));
-  const slugInput = document.createElement("input");
-  slugInput.value = slug;
-  slugInput.placeholder = "about";
-  slugInput.maxLength = 64;
-  slugInput.autocomplete = "off";
-  slugInput.className = "blog-page-slug-input";
-  // Normalize as the author types so the visible value matches what is saved.
-  slugInput.onblur = () => { if (slugInput.value.trim()) slugInput.value = slugify(slugInput.value); };
-  slugWrap.append(slugInput);
-  const titleInput = document.createElement("input");
-  titleInput.value = page.title || "";
-  titleInput.placeholder = "页面标题";
-  titleInput.maxLength = 120;
-  titleInput.autocomplete = "off";
-  titleInput.className = "blog-page-title";
-  titleInput.setAttribute("aria-label", "页面标题");
-  head.append(slugWrap, titleInput);
-  const remove = el("button", "blog-page-remove", "删除");
-  remove.type = "button";
-  remove.onclick = () => { row.remove(); blogDirty = true; blankPagesMessage(); };
-  head.append(remove);
-
-  const source = document.createElement("textarea");
-  source.value = page.source || "";
-  source.rows = 6;
-  source.spellcheck = false;
-  source.className = "blog-page-source";
-  source.setAttribute("aria-label", "页面 Markdown 内容");
-
-  row.append(head, source);
-  row.getValue = () => ({ slug: slugInput.value.trim(), title: titleInput.value.trim(), source: source.value, createdAt: row.dataset.createdAt || undefined, updatedAt: row.dataset.updatedAt || undefined });
-  return row;
-}
-
-function blogPagesCount() { return $("blog-pages").querySelectorAll(".blog-page").length; }
-
-function blankPagesMessage() {
-  const empty = $("blog-pages").querySelector(".tree-message");
-  if (empty) empty.hidden = blogPagesCount() > 0;
-  else if (!blogPagesCount()) $("blog-pages").append(el("p", "tree-message", "还没有独立页面"));
-}
-
-function renderBlogPages(pages) {
-  const container = $("blog-pages");
-  container.replaceChildren();
-  for (const page of pages || []) container.append(makePageRow(page));
-  blankPagesMessage();
-}
-
 function renderBlog(config) {
   blogDirty = false;
   $("blog-title").value = config.title || "";
   $("blog-description").value = config.description || "";
   $("blog-author").value = config.author || "";
   $("blog-footer").value = config.footer || "";
-  renderBlogPages(config.pages);
   $("blog-state").textContent = config.vault || "";
 }
 
@@ -263,13 +206,6 @@ function blogSettingsPayload(config) {
     footer: config.footer ?? "",
     accent: config.accent ?? "",
     theme: config.theme ?? "auto",
-    pages: (config.pages ?? []).map((page) => ({
-      slug: page.slug ?? "",
-      title: page.title ?? "",
-      source: page.source ?? "",
-      createdAt: page.createdAt,
-      updatedAt: page.updatedAt,
-    })),
   };
 }
 
@@ -281,29 +217,17 @@ function blogPayload() {
     footer: $("blog-footer").value.trim(),
     accent: blogConfig.accent,
     theme: blogConfig.theme,
-    pages: [...$("blog-pages").querySelectorAll(".blog-page")].map((row) => row.getValue()),
   };
 }
 
 $("blog-form").oninput = () => { blogDirty = true; };
 for (const input of document.querySelectorAll('input[name="blog-theme"]')) input.onchange = () => { blogPreview(); saveAppearance(); };
-$("blog-add-page").onclick = () => {
-  if (blogPagesCount() >= MAX_PAGES) { blogError(`最多 ${MAX_PAGES} 个独立页面`); return; }
-  blogError();
-  const taken = [...$("blog-pages").querySelectorAll(".blog-page-slug-input")].map((input) => input.value.trim()).filter(Boolean);
-  const row = makePageRow({ slug: uniqueSlug("page", taken), title: "新页面", source: "" });
-  $("blog-pages").append(row);
-  blogDirty = true;
-  blankPagesMessage();
-  row.querySelector(".blog-page-slug-input").focus();
-};
 $("blog-form").onsubmit = async (event) => {
   event.preventDefault();
   if (siteBusy || !blogConfig) return;
   const payload = blogPayload();
   const checked = validateBlog(payload);
   if (!checked.ok) { blogError(checked.error); return; }
-  payload.pages = checked.pages;
   setSiteBusy(true);
   blogError();
   $("blog-state").textContent = "保存中…";
@@ -339,7 +263,7 @@ function loadSiteSettings() {
     blogConfig = config;
     renderBlog(config);
     renderAppearance();
-    $("blog-form").hidden = false;
+    if ($("editor-view").hidden) $("blog-form").hidden = false;
     setSiteBusy(false);
     $("appearance-state").textContent = "全站生效";
   }).catch((error) => {
@@ -671,6 +595,7 @@ $("version-install").onclick = async () => {
 };
 
 // Primary tabs change the address and history, not the page or its drafts.
+const pages = initPages({ request, toast: (message) => alertAt("settings-notice", message), profileReady: () => Boolean(blogConfig) });
 const tabs = [...document.querySelectorAll('.settings-tabs [role="tab"]')];
 let currentTab;
 function tabKey(tab) { return tab.id.slice(4); }
@@ -697,6 +622,7 @@ function showTab(key) {
   }
   renderTabLinks();
   if (key === "appearance" || key === "blog") loadSiteSettings();
+  pages.showTab(key === "blog");
   if (key === "general") loadPreferences();
   if (key === "publication") loadPublicationTab();
   if (key === "system" && !context?.problem) loadVersion();
@@ -723,14 +649,14 @@ document.querySelector(".settings-tabs").onkeydown = (event) => {
 };
 window.addEventListener("popstate", () => { if (context) showTab(selectedTab()); });
 
-function workInProgress() { return systemBusy || siteBusy || preferencesBusy || gitBusy || publicationBusy || versionBusy; }
+function workInProgress() { return systemBusy || siteBusy || preferencesBusy || gitBusy || publicationBusy || versionBusy || pages.busy; }
 function canLeave() {
   if (workInProgress()) { alertAt("settings-notice", "正在保存或同步，请稍候"); return false; }
-  return !(systemDirty || blogDirty) || window.confirm("还有未保存的设置，是否放弃修改？");
+  return !(systemDirty || blogDirty || pages.dirty) || window.confirm("还有未保存的设置，是否放弃修改？");
 }
 window.addEventListener("pageshow", (event) => { if (event.persisted) leaving = false; });
 window.addEventListener("beforeunload", (event) => {
-  if (!leaving && (systemDirty || blogDirty || workInProgress())) { event.preventDefault(); event.returnValue = ""; }
+  if (!leaving && (systemDirty || blogDirty || pages.dirty || workInProgress())) { event.preventDefault(); event.returnValue = ""; }
 });
 $("settings-return").onclick = (event) => {
   if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;

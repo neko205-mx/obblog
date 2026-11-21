@@ -577,6 +577,9 @@ func normalizeBlog(b Blog) (*Blog, error) {
 		if len(page.Source) > MaxPageSource {
 			return nil, errors.New("独立页面内容超过 2 MiB")
 		}
+		if !ValidPageTemplate(page.Template) {
+			return nil, errors.New("独立页面模板标识无效")
+		}
 		if page.CreatedAt.IsZero() {
 			page.CreatedAt = time.Now().UTC()
 		}

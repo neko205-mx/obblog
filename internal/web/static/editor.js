@@ -102,6 +102,7 @@ export class NoteEditor {
     $("editor-view").classList.remove("preview-only");
     $("editor-preview-toggle").textContent = this.page ? "仅看预览" : "展开预览";
     $("editor-preview").replaceChildren();
+    if (this.page) this.showTemplateWarning();
     $("editor-preview-toggle").setAttribute("aria-pressed", "false");
     this.updateLines();
     this.status();
@@ -115,6 +116,7 @@ export class NoteEditor {
     this.previewController?.abort();
     this.previewID++;
     this.hideSuggestions();
+    if (this.page) $("editor-preview").replaceChildren();
   }
 
   status(message, kind = "") {
@@ -157,6 +159,12 @@ export class NoteEditor {
     this.previewTimer = setTimeout(() => this.preview(id), delay);
   }
 
+  showTemplateWarning(message = "") {
+    const warning = $("page-preview-warning");
+    warning.textContent = message;
+    warning.hidden = !message;
+  }
+
   async preview(id) {
     if (!this.active || id !== this.previewID) return;
     if (this.livePreview === false) { $("editor-preview-state").textContent = "实时预览已关闭"; return; }
@@ -168,19 +176,33 @@ export class NoteEditor {
         body: JSON.stringify(this.page ? this.page.input(this.draft.source) : { path: $("editor-path").value, source: this.draft.source }), signal: this.previewController.signal,
       });
       if (!this.active || id !== this.previewID) return;
-      // Preview uses the same safe Markdown renderer as the normal reading view.
-      $("editor-preview").innerHTML = result.html;
+      const preview = $("editor-preview");
+      // Theme fragments are not Markdown renderer output. Keep them out of the
+      // same-origin settings document, even when the theme is trusted locally.
+      if (this.page && typeof result.sandboxHTML === "string" && result.sandboxHTML) {
+        const frame = document.createElement("iframe");
+        frame.className = "page-template-frame";
+        frame.title = "独立页面模板预览";
+        frame.setAttribute("sandbox", "");
+        frame.referrerPolicy = "no-referrer";
+        frame.srcdoc = result.sandboxHTML;
+        preview.replaceChildren(frame);
+      } else {
+        // Ordinary pages (including the built-in template) return safe HTML.
+        preview.innerHTML = result.html;
+      }
       if (this.page) {
         const title = document.createElement("h1");
         title.textContent = $("page-title").value.trim() || "未命名页面";
-        $("editor-preview").prepend(title);
+        preview.prepend(title);
+        this.showTemplateWarning(result.templateWarning);
       } else if (result.properties) {
         const properties = document.createElement("pre");
         properties.className = "editor-property-preview";
         properties.textContent = result.properties;
-        $("editor-preview").prepend(properties);
+        preview.prepend(properties);
       }
-      this.onPreview?.($("editor-preview"));
+      this.onPreview?.(preview);
       $("editor-preview-state").textContent = "实时预览";
     } catch (error) {
       if (error.name === "AbortError" || id !== this.previewID) return;

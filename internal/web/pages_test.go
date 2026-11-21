@@ -47,8 +47,16 @@ func TestStandalonePageCRUD(t *testing.T) {
 		Limit         int                       `json:"limit"`
 		LinkableNotes []any                     `json:"linkableNotes"`
 	}](t, listed, 200)
-	if len(list.Pages) != 2 || list.Pages[0] != created.PageSummary || list.Limit != 12 || list.LinkableNotes == nil || strings.Contains(listed.Body.String(), `"source"`) || strings.Contains(listed.Body.String(), "PAGE_PRIVATE_FROM_LIST") {
+	if len(list.Pages) != 2 || list.Pages[0] != created.PageSummary || list.Limit != 12 || list.LinkableNotes == nil || strings.Contains(listed.Body.String(), "PAGE_PRIVATE_FROM_LIST") {
 		t.Fatalf("invalid list: %s", listed.Body.String())
+	}
+	// A template can expose starter Markdown, but saved page summaries never
+	// include their source.
+	entries := decodePageResponse[struct{ Pages []map[string]json.RawMessage }](t, listed, 200)
+	for _, entry := range entries.Pages {
+		if _, ok := entry["source"]; ok {
+			t.Fatalf("saved source leaked in page summary: %s", listed.Body.String())
+		}
 	}
 	get := decodePageResponse[pageDetail](t, editRequest(h, "GET", pagesAPI+"/about", nil), 200)
 	if !reflect.DeepEqual(get, created) {

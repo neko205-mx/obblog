@@ -29,11 +29,12 @@ type Heading struct {
 }
 
 type Result struct {
-	HTML       string    `json:"html"`
-	Headings   []Heading `json:"headings"`
-	Properties string    `json:"properties"`
-	Words      int       `json:"words"`
-	Excerpt    string    `json:"excerpt"`
+	HTML        string       `json:"html"`
+	Headings    []Heading    `json:"headings"`
+	Properties  string       `json:"properties"`
+	Words       int          `json:"words"`
+	Excerpt     string       `json:"excerpt"`
+	FriendLinks []FriendLink `json:"friendLinks,omitempty"`
 }
 
 func splitFrontmatter(source []byte) ([]byte, string) {
@@ -89,9 +90,10 @@ func Render(raw []byte, from string, snapshot *vault.Snapshot) (*Result, error) 
 
 // RenderOptions lets published copies resolve links without accessing the live vault.
 type RenderOptions struct {
-	Resolve  func(from, target string, wiki bool) (*vault.Entry, error)
-	NoteURL  func(name, fragment string) string
-	AssetURL func(name string) string
+	Resolve     func(from, target string, wiki bool) (*vault.Entry, error)
+	NoteURL     func(name, fragment string) string
+	AssetURL    func(name string) string
+	FriendLinks bool // Present standalone site links as cards.
 }
 
 func RenderWithOptions(raw []byte, from string, snapshot *vault.Snapshot, options RenderOptions) (*Result, error) {
@@ -106,6 +108,9 @@ func RenderWithOptions(raw []byte, from string, snapshot *vault.Snapshot, option
 	)
 	doc := md.Parser().Parse(text.NewReader(source))
 	result := &Result{Properties: properties, Headings: []Heading{}}
+	if options.FriendLinks {
+		result.FriendLinks = prepareFriendLinkGrids(doc, source)
+	}
 	plainParts := []string{}
 	ids := map[string]bool{}
 	err := ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -118,6 +123,11 @@ func RenderWithOptions(raw []byte, from string, snapshot *vault.Snapshot, option
 			}
 		}
 		switch node := n.(type) {
+		case *friendLinkGrid:
+			if len(plainParts) == 0 {
+				first := node.links[0]
+				plainParts = append(plainParts, first.Title, first.Description)
+			}
 		case *ast.Heading:
 			label := string(node.Text(source))
 			base := Slug(label)
@@ -266,6 +276,9 @@ func (r *noteRenderer) assetURL(name string) string {
 func (r *noteRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(wikiKind, r.renderWiki)
 	reg.Register(ast.KindBlockquote, r.renderBlockquote)
+	if r.options.FriendLinks {
+		reg.Register(friendLinkGridKind, renderFriendLinkGrid)
+	}
 }
 
 func (r *noteRenderer) rewrite(destination []byte, image bool) []byte {

@@ -144,9 +144,10 @@ type pageDetail struct {
 }
 
 type pageRequest struct {
-	Slug   string  `json:"slug"`
-	Title  string  `json:"title"`
-	Source *string `json:"source"`
+	Slug     string  `json:"slug"`
+	Title    string  `json:"title"`
+	Source   *string `json:"source"`
+	Template string  `json:"template,omitempty"`
 }
 
 func (in pageRequest) input(w http.ResponseWriter) (publication.PageInput, bool) {
@@ -158,7 +159,11 @@ func (in pageRequest) input(w http.ResponseWriter) (publication.PageInput, bool)
 		fail(w, http.StatusRequestEntityTooLarge, publication.ErrPageTooLarge.Error())
 		return publication.PageInput{}, false
 	}
-	return publication.PageInput{Slug: in.Slug, Title: in.Title, Source: *in.Source}, true
+	if !publication.ValidPageTemplate(in.Template) {
+		fail(w, http.StatusBadRequest, "独立页面模板标识无效")
+		return publication.PageInput{}, false
+	}
+	return publication.PageInput{Slug: in.Slug, Title: in.Title, Source: *in.Source, Template: in.Template}, true
 }
 
 func (a *App) listStandalonePages(w http.ResponseWriter, r *http.Request) {
@@ -175,7 +180,8 @@ func (a *App) listStandalonePages(w http.ResponseWriter, r *http.Request) {
 		Pages         []publication.PageSummary `json:"pages"`
 		Limit         int                       `json:"limit"`
 		LinkableNotes []linkableNote            `json:"linkableNotes"`
-	}{pages, publication.PageLimit, notes})
+		Templates     []pageTemplate            `json:"templates"`
+	}{pages, publication.PageLimit, notes, a.effectivePublicTheme().pageTemplateCatalog()})
 }
 
 func (a *App) getStandalonePage(w http.ResponseWriter, r *http.Request) {
@@ -194,6 +200,10 @@ func (a *App) createStandalonePage(w http.ResponseWriter, r *http.Request) {
 	}
 	input, ok := req.input(w)
 	if !ok {
+		return
+	}
+	if !a.acceptsPageTemplate(input.Template) {
+		fail(w, http.StatusBadRequest, "当前主题不提供该页面模板")
 		return
 	}
 	page, err := a.publications.CreatePage(input)
@@ -217,6 +227,11 @@ func (a *App) updateStandalonePage(w http.ResponseWriter, r *http.Request) {
 	}
 	input, ok := req.input(w)
 	if !ok {
+		return
+	}
+	// Preserve older pages even if their template was disabled or removed.
+	if previous := a.publications.Page(r.PathValue("slug")); previous != nil && previous.Template != input.Template && !a.acceptsPageTemplate(input.Template) {
+		fail(w, http.StatusBadRequest, "当前主题不提供该页面模板")
 		return
 	}
 	page, err := a.publications.UpdatePage(r.PathValue("slug"), input, req.Revision)
@@ -274,14 +289,34 @@ func (a *App) previewStandalonePage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// The render path is independent of user metadata, so a preview works
-	// while a slug or title is still blank or incomplete.
-	rendered, err := renderStandalone(input.Source, a.publicSnapshot())
+	theme := builtinPublicTheme
+	if input.Template != "" && input.Template != friendsTemplateID {
+		theme = a.effectivePublicTheme()
+	}
+	item, found := theme.pageTemplate(input.Template)
+	articles := a.publicSnapshot()
+	rendered, err := renderStandalone(input.Source, articles, item.Format)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, "页面渲染失败")
 		return
 	}
-	respond(w, rendered)
+	preview := struct {
+		*markdown.Result
+		SandboxHTML string `json:"sandboxHTML,omitempty"`
+		Warning     string `json:"templateWarning,omitempty"`
+	}{Result: rendered}
+	if input.Template != "" && !found {
+		preview.Warning = "当前主题不提供这个模板，已使用普通 Markdown 预览。"
+	} else if item.fragment != "" {
+		// Metadata is still allowed to be incomplete while editing a draft.
+		page := publication.BlogPage{Title: input.Title, Slug: input.Slug, Template: input.Template}
+		if fragment, err := theme.executePageFragment(item, pageThemeData(a.publicBlog(), page, rendered)); err == nil {
+			preview.SandboxHTML = themeFragmentPreview(item, fragment)
+		} else {
+			preview.Warning = "页面模板预览失败，已显示安全的 Markdown 预览。"
+		}
+	}
+	respond(w, preview)
 }
 
 // updateStatus reports whether GitHub publishes a newer build. It only checks;
@@ -437,6 +472,7 @@ func (a *App) publicRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /pages/{slug}", a.publicStandalone)
 	mux.HandleFunc("GET /media/{id}/{blob}", a.publicAsset)
 	mux.HandleFunc("GET /blog.css", func(w http.ResponseWriter, r *http.Request) { a.static(w, r, "blog.css") })
+	mux.HandleFunc("GET /page-templates.css", func(w http.ResponseWriter, r *http.Request) { a.static(w, r, "page-templates.css") })
 	mux.HandleFunc("GET /theme-assets/{id}/{file...}", a.serveThemeAsset)
 	// Liveness probe for the container runtime. It touches the store so a
 	// wedged process, not just a closed listener, gets reported.
@@ -563,9 +599,10 @@ func resolvePublished(entries map[string]*vault.Entry, target string) *vault.Ent
 // local URL, protocol-relative URL, or data URL is used as an image source.
 var standaloneImageSource = regexp.MustCompile(`<img src="([^"]*)"`)
 
-func renderStandalone(source string, articles map[string]*publication.Article) (*markdown.Result, error) {
+func renderStandalone(source string, articles map[string]*publication.Article, format string) (*markdown.Result, error) {
 	published := publishedNotes(articles)
 	rendered, err := markdown.RenderWithOptions([]byte(source), "page/standalone.md", nil, markdown.RenderOptions{
+		FriendLinks: format == friendLinksFormat,
 		Resolve: func(from, target string, wiki bool) (*vault.Entry, error) {
 			// A standalone page lives outside the vault, so a wiki link without
 			// an extension must still find the article it names.
@@ -627,15 +664,19 @@ func (a *App) renderPublicStandalone(w http.ResponseWriter, slug string, preview
 		http.Error(w, "404 page not found", http.StatusNotFound)
 		return
 	}
-	rendered, err := renderStandalone(page.Source, a.publicSnapshot())
+	var theme publicTheme
+	if preview != nil {
+		theme = *preview
+	} else {
+		theme = a.effectivePublicTheme()
+	}
+	item, _ := theme.pageTemplate(page.Template)
+	rendered, err := renderStandalone(page.Source, a.publicSnapshot(), item.Format)
 	if err != nil {
 		fail(w, 500, "页面渲染失败")
 		return
 	}
-	data := newThemeData(blog)
-	data.Page = &themePage{Title: page.Title, URL: publication.PageURL(page.Slug), UpdatedAt: page.UpdatedAt}
-	data.Content, data.Headings = template.HTML(rendered.HTML), rendered.Headings
-	a.renderThemedPage(w, "page", data, preview)
+	writeThemedPage(w, "page", pageThemeData(blog, *page, rendered), theme, preview != nil)
 }
 
 func (a *App) publicAsset(w http.ResponseWriter, r *http.Request) {

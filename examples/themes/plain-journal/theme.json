@@ -2,5 +2,15 @@
   "name": "Plain Journal",
   "version": "1.0.0",
   "description": "简洁的文字博客主题，包含文章列表、正文目录和独立页面。",
-  "apiVersion": 1
+  "apiVersion": 1,
+  "pageTemplates": [
+    {
+      "id": "profile",
+      "label": "个人简介",
+      "description": "使用 Plain Journal 的简介版式，支持继续添加 Markdown 小节。",
+      "title": "关于我",
+      "slug": "about",
+      "style": "profile.css"
+    }
+  ]
 }

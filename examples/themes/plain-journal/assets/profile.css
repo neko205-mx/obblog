@@ -1,0 +1,5 @@
+.journal-profile {
+  padding-inline-start: clamp(12px, 2vw, 24px);
+  border-inline-start: 3px solid var(--accent-ui, currentColor);
+}
+.journal-profile > :first-child { margin-top: 0; }

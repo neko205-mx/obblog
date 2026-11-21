@@ -43,8 +43,9 @@ type publicThemeInfo struct {
 }
 
 type publicTheme struct {
-	info publicThemeInfo
-	tmpl *template.Template
+	info          publicThemeInfo
+	tmpl          *template.Template
+	pageTemplates []pageTemplate
 }
 
 // Only these values cross the template boundary. Never embed publication or
@@ -60,17 +61,18 @@ type themePost struct {
 	ShowUpdated                  bool
 }
 type themePage struct {
-	Title, URL string
-	UpdatedAt  time.Time
+	Title, URL, Template string
+	UpdatedAt            time.Time
 }
 type themeData struct {
-	Site      themeSite
-	Posts     []themePost
-	Post      *themePost
-	Page      *themePage
-	Content   template.HTML
-	Headings  []markdown.Heading
-	ThemeAttr template.HTMLAttr
+	Site        themeSite
+	Posts       []themePost
+	Post        *themePost
+	Page        *themePage
+	Content     template.HTML
+	Headings    []markdown.Heading
+	FriendLinks []markdown.FriendLink
+	ThemeAttr   template.HTMLAttr
 }
 
 func newThemeData(blog *publication.Blog) themeData {
@@ -177,10 +179,11 @@ func (a *App) loadPublicTheme(id string) (publicTheme, error) {
 		return theme, err
 	}
 	var manifest struct {
-		Name        string `json:"name"`
-		Version     string `json:"version"`
-		Description string `json:"description"`
-		APIVersion  int    `json:"apiVersion"`
+		Name          string             `json:"name"`
+		Version       string             `json:"version"`
+		Description   string             `json:"description"`
+		APIVersion    int                `json:"apiVersion"`
+		PageTemplates []pageTemplateSpec `json:"pageTemplates"`
 	}
 	if json.Unmarshal(data, &manifest) != nil || strings.TrimSpace(manifest.Name) == "" || len(manifest.Name) > 160 || strings.TrimSpace(manifest.Version) == "" || len(manifest.Version) > 40 || len(manifest.Description) > 1000 {
 		return theme, errors.New("theme.json 缺少有效的主题名称或版本")
@@ -231,6 +234,10 @@ func (a *App) loadPublicTheme(id string) (publicTheme, error) {
 			return theme, err
 		}
 	}
+	theme.pageTemplates, err = loadPageTemplates(root, id, manifest.PageTemplates, tmpl)
+	if err != nil {
+		return theme, err
+	}
 	theme.tmpl = tmpl
 	return theme, nil
 }
@@ -240,6 +247,20 @@ func (t publicTheme) execute(view string, data themeData) ([]byte, error) {
 	name := view
 	if t.info.ID != defaultPublicTheme {
 		name += ".html"
+	}
+	if view == "page" && data.Page != nil {
+		if item, ok := t.pageTemplate(data.Page.Template); ok {
+			if item.fragment != "" {
+				fragment, err := t.executePageFragment(item, data)
+				if err != nil {
+					return nil, err
+				}
+				data.Content = fragment
+			}
+			// Rel=stylesheet is valid in the body, so a public theme need not
+			// opt into the card stylesheet or the fragment's optional CSS.
+			data.Content = templateStyleLinks(item) + data.Content
+		}
 	}
 	if err := t.tmpl.ExecuteTemplate(&out, name, data); err != nil {
 		return nil, err
@@ -269,6 +290,16 @@ func (t publicTheme) validate() error {
 		}
 		if _, err := t.execute(view, fixture); err != nil {
 			return fmt.Errorf("%s.html: %w", view, err)
+		}
+	}
+	for _, item := range t.pageTemplates {
+		fixture := data
+		page := page
+		page.Template = item.ID
+		fixture.Page = &page
+		fixture.FriendLinks = []markdown.FriendLink{{Title: "示例博客", URL: "https://example.com/", Description: "示例简介", Initial: "示"}}
+		if _, err := t.execute("page", fixture); err != nil {
+			return fmt.Errorf("页面模板 %s: %w", item.ID, err)
 		}
 	}
 	return nil
@@ -425,31 +456,41 @@ func (a *App) previewTheme(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-func (a *App) renderThemedPage(w http.ResponseWriter, view string, data themeData, preview *publicTheme) {
-	t := builtinPublicTheme
-	if preview != nil {
-		t = *preview
-	} else if a.publications != nil {
+func (a *App) effectivePublicTheme() publicTheme {
+	if a.publications != nil {
 		if id := a.publications.PublicTheme(); id != "" && id != defaultPublicTheme {
 			if candidate, err := a.loadPublicTheme(id); err == nil && candidate.validate() == nil {
-				t = candidate
+				return candidate
 			}
 		}
 	}
+	return builtinPublicTheme
+}
+
+func (a *App) renderThemedPage(w http.ResponseWriter, view string, data themeData, preview *publicTheme) {
+	if preview != nil {
+		writeThemedPage(w, view, data, *preview, true)
+		return
+	}
+	writeThemedPage(w, view, data, a.effectivePublicTheme(), false)
+}
+
+func writeThemedPage(w http.ResponseWriter, view string, data themeData, t publicTheme, preview bool) {
 	body, err := t.execute(view, data)
-	if err != nil && preview == nil && t.info.ID != defaultPublicTheme {
+	if err != nil && !preview && t.info.ID != defaultPublicTheme {
+		// data still contains only safe Markdown, not untrusted theme markup.
 		t = builtinPublicTheme
 		body, err = t.execute(view, data)
 	}
 	if err != nil {
-		if preview != nil {
+		if preview {
 			fail(w, 400, fmt.Sprintf("主题预览失败：%v", err))
 		} else {
 			fail(w, 500, "页面渲染失败")
 		}
 		return
 	}
-	if preview != nil || t.info.ID != defaultPublicTheme {
+	if preview || t.info.ID != defaultPublicTheme {
 		w.Header().Set("Content-Security-Policy", externalThemeCSP)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

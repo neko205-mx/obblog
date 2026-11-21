@@ -72,3 +72,21 @@ plain-journal/
 `/theme.css` 是可选的共享配色样式，示例通过它使用站点的主题色和深浅设置。主题自己的 CSS、位图和字体放在 `assets/` 中；例如 PNG、JPEG、WebP 或 WOFF2。从 CSS 引用同目录资源时，可写相对路径，例如 `url("cover.webp")`。不支持 SVG、HTML 或 JavaScript 资源。
 
 主题只负责展示公开模型。不要添加 JavaScript、内联事件处理器、PHP 或其他可执行代码。模板没有读取私有笔记、配置或 Git 凭据的接口。主题不接管附件路由；正文中已经生成的文章、独立页面和公开附件链接应原样保留。
+
+## 给独立页面提供模板
+
+在 `theme.json` 可选的 `pageTemplates` 数组中声明模板（最多 16 个）。例如：
+
+```json
+"pageTemplates": [
+  {"id":"profile","label":"个人简介","description":"简洁的个人页",
+   "title":"关于我","slug":"about","format":"markdown","style":"profile.css"}
+]
+```
+
+- `id` 是主题内唯一的短标识，只能用小写字母、数字和连字符；保存到页面的完整标识是 `主题ID/模板ID`。`label` 必填，`title` 和 `slug` 省略时分别使用 `label` 和 `id`。
+- `page-templates/<id>.html` 是必需的 Go HTML 正文片段，只写正文区域，不写完整 HTML 文档。它可以使用 `.Content`、`.Page`（含 `.Template`）、`.Headings`、`.Site` 等公开字段。主题自己的 `page.html` 仍负责全页外壳，原样输出 `.Content` 即可。
+- `page-templates/<id>.md` 是可选的起始 Markdown，建页时复制到草稿（不超过 32 KiB）。`style` 可选，指向 `assets/` 内的 CSS 文件；编写选择器时使用自己的命名空间，以免影响页面外壳。
+- `format` 默认 `markdown`。使用 `friend-links` 时，`.Content` 中符合约定的链接会变成内置卡片，模板也可使用 `.FriendLinks` 自定义呈现，其字段为 `Title`、`URL`、`Description`、`Avatar` 和 `Initial`。友链写法见[发布文档](publishing.md)。
+
+可参考 Plain Journal 的[简介模板](../examples/themes/plain-journal/page-templates/profile.html)。只有当前主题的模板会出现在新建选项里，内置友链模板始终可用。后台在禁用脚本的隔离框中预览自定义片段；主题切换、失效或模板被移除时，已有页面回退到普通 Markdown，原正文和模板标识均保留。

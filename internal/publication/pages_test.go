@@ -43,7 +43,7 @@ func TestPagesAndMetadataWritesPreserveEachOtherAndDiskFormat(t *testing.T) {
 	}()
 	go func() {
 		<-start
-		_, err := store.UpdatePage("old-page", PageInput{"renamed", "New page name", "new body"}, old.Summary().Revision)
+		_, err := store.UpdatePage("old-page", PageInput{Slug: "renamed", Title: "New page name", Source: "new body"}, old.Summary().Revision)
 		results <- err
 	}()
 	close(start)
@@ -97,7 +97,7 @@ func TestFailedStandalonePageWriteLeavesStoreUnchanged(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(store.dir, "publications.json"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CreatePage(PageInput{"about", "About", "body"}); err == nil {
+	if _, err := store.CreatePage(PageInput{Slug: "about", Title: "About", Source: "body"}); err == nil {
 		t.Fatal("rename over directory unexpectedly succeeded")
 	}
 	if pages, _ := store.Pages(); len(pages) != 0 {

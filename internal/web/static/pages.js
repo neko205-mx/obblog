@@ -5,13 +5,23 @@ import { uniqueSlug, validatePage } from "./blog-model.mjs";
 export function initPages({ request, toast, profileReady }) {
   const $ = (id) => document.getElementById(id);
   const endpoint = "/admin/api/pages";
-  let catalog, opening = false, deleting = false, loading;
+  let catalog, opening = false, deleting = false, loading, blogVisible = false;
   let saved;
   const pathInput = $("editor-path");
   const titleInput = $("page-title");
   const listStatus = $("page-list-status");
+  const chooser = $("page-template-chooser");
+  const chooserButton = $("page-template-open");
+  const templateSelect = $("page-template-select");
+  const templateDescription = $("page-template-description");
+  const applyTemplateButton = $("page-template-apply");
   const detailURL = (slug) => `${endpoint}/${encodeURIComponent(slug)}`;
-  const input = (source) => ({ slug: pathInput.value.trim(), title: titleInput.value.trim(), source });
+  const templates = () => catalog?.templates || [];
+  const findTemplate = (id) => templates().find(template => template.id === id);
+  const input = (source) => ({
+    slug: pathInput.value.trim(), title: titleInput.value.trim(), source,
+    ...(saved?.template ? { template: saved.template } : {}),
+  });
   const editor = new NoteEditor({
     notify: toast,
     notes: () => catalog?.linkableNotes || [],
@@ -33,7 +43,7 @@ export function initPages({ request, toast, profileReady }) {
       titleInput.value = page.title;
       renderActions();
       editor.schedulePreview(0);
-      if (!await refresh(true)) throw new Error("页面列表刷新失败");
+      if (!await refresh()) throw new Error("页面列表刷新失败");
     },
   });
 
@@ -45,6 +55,11 @@ export function initPages({ request, toast, profileReady }) {
     $("page-delete").hidden = !exists;
     $("page-delete").disabled = editor.busy || deleting || !navigator.onLine;
     $("close-editor").disabled = editor.busy || deleting;
+    const marker = $("page-template-marker");
+    const template = saved?.template && findTemplate(saved.template);
+    marker.hidden = !saved?.template;
+    marker.textContent = template ? `模板：${template.label}`
+      : saved?.template ? `模板不可用：${saved.template}` : "";
   }
 
   function node(tag, text, className) {
@@ -58,17 +73,20 @@ export function initPages({ request, toast, profileReady }) {
     const list = $("page-list");
     list.replaceChildren();
     const entries = catalog?.pages || [];
-    for (const { title, slug, url } of entries) {
+    for (const { title, slug, url, template } of entries) {
       const item = node("li");
       const info = node("div");
       const name = node("button", title, "page-edit-link");
       name.type = "button";
       name.onclick = () => open(slug);
+      const label = node("div", undefined, "page-list-label");
+      label.append(name);
+      if (template) label.append(node("span", findTemplate(template)?.label || "模板不可用", "page-template-marker"));
       const link = node("a", url);
       link.href = url;
       link.target = "_blank";
       link.rel = "noopener";
-      info.append(name, link);
+      info.append(label, link);
       const action = node("button", "编辑");
       action.type = "button";
       action.setAttribute("aria-label", `编辑 ${title}`);
@@ -77,25 +95,59 @@ export function initPages({ request, toast, profileReady }) {
       list.append(item);
     }
     const full = Boolean(catalog && entries.length >= catalog.limit);
-    $("page-create").disabled = !catalog || full || opening;
+    $("page-create").disabled = !canCreate();
+    renderChooser();
     listStatus.textContent = !entries.length && catalog ? "还没有独立页面。" : full ? `已达到 ${catalog.limit} 个页面的上限。` : "";
   }
 
-  async function refresh(force = false) {
+  function canCreate() {
+    return Boolean(catalog && !opening && !editor.active && catalog.pages.length < catalog.limit);
+  }
+
+  function renderChooser() {
+    const previous = templateSelect.value;
+    const options = templates();
+    templateSelect.replaceChildren(...options.map(template => {
+      const option = node("option", template.label);
+      option.value = template.id;
+      return option;
+    }));
+    if (findTemplate(previous)) templateSelect.value = previous;
+    chooserButton.disabled = !canCreate() || !options.length;
+    if (chooserButton.disabled) setChooser(false);
+    showTemplateDescription();
+  }
+
+  function showTemplateDescription() {
+    const template = findTemplate(templateSelect.value);
+    templateDescription.textContent = template?.description || "";
+    templateDescription.hidden = !template?.description;
+    applyTemplateButton.disabled = !canCreate() || Boolean(loading) || !template;
+  }
+
+  function setChooser(open, focus = false) {
+    chooser.hidden = !open;
+    chooserButton.setAttribute("aria-expanded", String(open));
+    if (focus) (open ? templateSelect : chooserButton).focus();
+  }
+
+  async function refresh() {
     if (loading) return loading;
-    if (catalog && !force) return true;
     listStatus.textContent = "正在读取页面…";
     loading = request(endpoint).then((data) => {
       catalog = data;
       renderList();
+      if (editor.active) renderActions();
       return true;
     }).catch((error) => { listStatus.textContent = error.message; return false; })
-      .finally(() => { loading = null; });
+      .finally(() => { loading = null; showTemplateDescription(); });
+    showTemplateDescription();
     return loading;
   }
 
   function showEditor(value) {
     saved = value;
+    setChooser(false);
     $("standalone-pages").hidden = $("blog-form").hidden = true;
     $("editor-view").hidden = false;
     titleInput.value = value.title;
@@ -111,7 +163,7 @@ export function initPages({ request, toast, profileReady }) {
     renderList();
     listStatus.textContent = "正在打开页面…";
     try { showEditor(await request(detailURL(slug))); }
-    catch (error) { toast(error.message); await refresh(true); }
+    catch (error) { toast(error.message); await refresh(); }
     finally { opening = false; renderList(); }
   }
 
@@ -127,8 +179,25 @@ export function initPages({ request, toast, profileReady }) {
   }
 
   $("page-create").onclick = () => {
-    if (!catalog || opening || editor.active || catalog.pages.length >= catalog.limit) return;
+    if (!canCreate()) return;
     showEditor({ slug: uniqueSlug("page", catalog.pages.map((page) => page.slug)), title: "新页面", source: "" });
+  };
+  chooserButton.onclick = () => setChooser(chooser.hidden, true);
+  templateSelect.onchange = showTemplateDescription;
+  $("page-template-cancel").onclick = () => setChooser(false, true);
+  $("page-template-chooser").onkeydown = event => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    setChooser(false, true);
+  };
+  applyTemplateButton.onclick = () => {
+    const template = findTemplate(templateSelect.value);
+    if (!canCreate() || loading || !template) return;
+    const taken = catalog.pages.map(page => page.slug);
+    const suggested = uniqueSlug(template.slug, taken);
+    // Preserve room for a collision suffix even when the starter uses all 64 characters.
+    const slug = suggested.length <= 64 ? suggested : uniqueSlug(template.slug.slice(0, 61), taken);
+    showEditor({ slug, title: template.title, source: template.source, template: template.id });
   };
   $("page-delete").onclick = async () => {
     if (!saved?.url || editor.busy || deleting) return;
@@ -139,7 +208,7 @@ export function initPages({ request, toast, profileReady }) {
     try {
       await request(detailURL(saved.slug), { method: "DELETE", body: { revision: saved.revision } });
       await close(true);
-      await refresh(true);
+      await refresh();
     } catch (error) {
       editor.status(error.message, "error");
     } finally {
@@ -151,6 +220,9 @@ export function initPages({ request, toast, profileReady }) {
   return {
     get dirty() { return editor.dirty; },
     get busy() { return editor.busy || opening || deleting; },
-    showTab(isBlog) { if (isBlog && !editor.active) void refresh(); },
+    showTab(isBlog) {
+      if (isBlog && !blogVisible && !editor.active) void refresh();
+      blogVisible = isBlog;
+    },
   };
 }

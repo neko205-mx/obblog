@@ -20,6 +20,7 @@ const (
 
 var (
 	pageSlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+	templateThemeID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 	ErrInvalidPage  = errors.New("无效的独立页面")
 	ErrPageTooLarge = errors.New("独立页面内容超过 2 MiB")
 	ErrPageExists   = errors.New("该独立页面短地址已存在")
@@ -33,15 +34,17 @@ type BlogPage struct {
 	Slug      string    `json:"slug"`
 	Title     string    `json:"title"`
 	Source    string    `json:"source"`
+	Template  string    `json:"template,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // PageInput contains the user-editable fields, not timestamps or revision.
 type PageInput struct {
-	Slug   string `json:"slug"`
-	Title  string `json:"title"`
-	Source string `json:"source"`
+	Slug     string `json:"slug"`
+	Title    string `json:"title"`
+	Source   string `json:"source"`
+	Template string `json:"template,omitempty"`
 }
 
 // PageSummary excludes source for listing, but carries the revision needed to
@@ -53,10 +56,11 @@ type PageSummary struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 	Revision  string    `json:"revision"`
 	URL       string    `json:"url"`
+	Template  string    `json:"template,omitempty"`
 }
 
 func (p BlogPage) Summary() PageSummary {
-	return PageSummary{p.Slug, p.Title, p.CreatedAt, p.UpdatedAt, p.revision(), PageURL(p.Slug)}
+	return PageSummary{p.Slug, p.Title, p.CreatedAt, p.UpdatedAt, p.revision(), PageURL(p.Slug), p.Template}
 }
 
 func (p BlogPage) revision() string {
@@ -66,11 +70,23 @@ func (p BlogPage) revision() string {
 	for _, field := range []string{p.Slug, p.Title, p.Source, p.CreatedAt.UTC().Format(time.RFC3339Nano), p.UpdatedAt.UTC().Format(time.RFC3339Nano)} {
 		fmt.Fprintf(h, "%d:%s", len(field), field)
 	}
+	if p.Template != "" {
+		fmt.Fprintf(h, "%d:%s", len(p.Template), p.Template)
+	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
 func validPageSlug(slug string) bool {
 	return len(slug) <= maxPageSlug && pageSlugPattern.MatchString(slug)
+}
+
+// ValidPageTemplate accepts an empty (plain Markdown) or a namespaced ID.
+func ValidPageTemplate(id string) bool {
+	if id == "" {
+		return true
+	}
+	theme, key, ok := strings.Cut(id, "/")
+	return ok && templateThemeID.MatchString(theme) && validPageSlug(key)
 }
 
 func validatePage(input PageInput) (PageInput, error) {
@@ -87,6 +103,9 @@ func validatePage(input PageInput) (PageInput, error) {
 	}
 	if !utf8.ValidString(input.Source) {
 		return PageInput{}, fmt.Errorf("%w：正文不是 UTF-8", ErrInvalidPage)
+	}
+	if !ValidPageTemplate(input.Template) {
+		return PageInput{}, fmt.Errorf("%w：模板标识无效", ErrInvalidPage)
 	}
 	return input, nil
 }
@@ -147,7 +166,7 @@ func (s *Store) CreatePage(input PageInput) (BlogPage, error) {
 		return BlogPage{}, ErrPageLimit
 	}
 	now := time.Now().UTC()
-	page := BlogPage{input.Slug, input.Title, input.Source, now, now}
+	page := BlogPage{Slug: input.Slug, Title: input.Title, Source: input.Source, Template: input.Template, CreatedAt: now, UpdatedAt: now}
 	next := cloneBlog(s.blog)
 	next.Pages = append(next.Pages, &page)
 	if err := s.persist(s.articles, next, s.gitHead); err != nil {
@@ -178,7 +197,7 @@ func (s *Store) UpdatePage(original string, input PageInput, revision string) (B
 	if !now.After(previous.UpdatedAt) {
 		now = previous.UpdatedAt.UTC().Add(time.Nanosecond)
 	}
-	page := BlogPage{input.Slug, input.Title, input.Source, previous.CreatedAt, now}
+	page := BlogPage{Slug: input.Slug, Title: input.Title, Source: input.Source, Template: input.Template, CreatedAt: previous.CreatedAt, UpdatedAt: now}
 	next := cloneBlog(s.blog)
 	next.Pages[i] = &page
 	if err := s.persist(s.articles, next, s.gitHead); err != nil {

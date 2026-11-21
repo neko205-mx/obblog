@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow">
   <title>设置与工具 · OB Vault</title>
-  <link rel="stylesheet" href="/admin/palette.css"><link rel="stylesheet" href="/blog.css"><link rel="stylesheet" href="/admin/settings.css">
+  <link rel="stylesheet" href="/admin/palette.css"><link rel="stylesheet" href="/blog.css"><link rel="stylesheet" href="/page-templates.css"><link rel="stylesheet" href="/admin/settings.css">
   <script type="module" src="/admin/settings.js"></script>
 </head>
 <body class="settings-page">
@@ -81,8 +81,15 @@
         <div class="settings-actions"><button type="submit" class="save-button" id="blog-save">保存博客设置</button></div>
       </form>
       <section id="standalone-pages" class="settings-section" aria-labelledby="page-list-title">
-        <div class="section-heading"><h3 id="page-list-title" tabindex="-1">独立页面</h3><button type="button" id="page-create" disabled>新建页面</button></div>
+        <div class="section-heading"><h3 id="page-list-title" tabindex="-1">独立页面</h3><div class="page-editor-actions"><button type="button" id="page-create" disabled>新建页面</button><button type="button" id="page-template-open" aria-expanded="false" aria-controls="page-template-chooser" disabled>使用模板</button></div></div>
         <p class="field-note">用于关于我、友情链接等不出现在文章列表里的内容。保存后立即公开，并自动加入博客导航。</p>
+        <section id="page-template-chooser" class="page-template-chooser" aria-label="选择独立页面模板" hidden>
+          <label for="page-template-select">页面模板</label>
+          <select id="page-template-select" aria-describedby="page-template-description page-template-note"></select>
+          <p id="page-template-description" class="field-note" hidden></p>
+          <p id="page-template-note" class="field-note">模板提供一份起始内容。你仍可编辑 Markdown，确认无误后再发布。</p>
+          <div class="page-editor-actions"><button type="button" id="page-template-apply" class="save-button" disabled>创建草稿</button><button type="button" id="page-template-cancel">取消</button></div>
+        </section>
         <ul id="page-list" class="page-list" aria-label="独立页面列表"></ul>
         <p id="page-list-status" role="status"></p>
       </section>
@@ -95,14 +102,14 @@
           <div><label for="page-title">页面标题</label><input id="page-title" maxlength="120" autocomplete="off" required></div>
           <div><label for="editor-path">短地址</label><div class="page-path"><code>/pages/</code><input id="editor-path" maxlength="64" autocomplete="off" spellcheck="false" required></div></div>
         </div>
-        <div class="page-editor-meta"><span id="editor-status" role="status"></span><span id="editor-character-count"></span><span>Ctrl / ⌘ S 保存</span></div>
+        <div class="page-editor-meta"><span id="editor-status" role="status"></span><span id="page-template-marker" class="page-template-marker" hidden></span><span id="editor-character-count"></span><span>Ctrl / ⌘ S 保存</span></div>
         <div id="editor-conflict" class="settings-error" hidden><p>服务器上的页面可能已有变化。草稿仍保留在编辑器里。</p><div class="page-editor-actions"><button type="button" id="copy-draft">复制草稿</button><button type="button" id="show-server-note">查看服务器版本</button></div><pre id="server-version" aria-label="服务器当前版本，只读" hidden></pre></div>
         <div class="page-editor-columns">
           <section class="page-source-pane" aria-label="Markdown 源码">
             <div class="page-pane-header"><span>源码</span><div class="page-format" role="group" aria-label="Markdown 格式"><button type="button" data-format="heading" title="二级标题">标题</button><button type="button" data-format="bold" title="加粗">加粗</button><button type="button" data-format="link">链接</button><button type="button" data-format="image">图片链接</button><button type="button" data-format="wiki" title="插入已发布笔记双链">双链</button><button type="button" data-format="list">列表</button></div></div>
             <div class="page-source-input"><pre id="editor-lines" aria-hidden="true">1</pre><textarea id="note-editor" aria-label="页面 Markdown 编辑器" spellcheck="false" wrap="off" autocomplete="off" autocapitalize="off" aria-controls="wiki-completions"></textarea><div id="wiki-completions" class="page-completions" role="listbox" aria-label="已发布笔记补全" hidden></div></div>
           </section>
-          <section id="page-preview-pane" class="page-preview-pane" aria-label="页面预览"><div class="page-pane-header"><span>公开页面预览</span><small id="editor-preview-state" role="status"></small><button type="button" id="editor-preview-toggle" aria-pressed="false" aria-controls="page-preview-pane">仅看预览</button></div><article id="editor-preview" class="article-body" aria-label="页面预览正文"></article></section>
+          <section id="page-preview-pane" class="page-preview-pane" aria-label="页面预览"><div class="page-pane-header"><span>公开页面预览</span><small id="editor-preview-state" role="status"></small><button type="button" id="editor-preview-toggle" aria-pressed="false" aria-controls="page-preview-pane">仅看预览</button></div><p id="page-preview-warning" class="page-preview-warning" role="status" hidden></p><article id="editor-preview" class="article-body" aria-label="页面预览正文"></article></section>
         </div>
         <p class="field-note">预览使用公开页的 Markdown 渲染。双链仅匹配已发布笔记；图片可使用 HTTPS 地址。</p>
       </section>

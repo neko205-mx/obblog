@@ -744,11 +744,11 @@ $("typecho-import-form").onsubmit = async (event) => {
     const data = await requestTypecho("preview", file);
     if (typechoFile.files[0] !== file) return;
     renderTypechoResult(data, false);
-    const blocked = data.blocked || (data.summary.conflicts ? "存在路径冲突，未写入任何笔记。请解决冲突后重新预览。" : "");
+    const blocked = data.blocked || (data.summary.conflicts ? "解决路径冲突后重新预览。" : "");
     const canImport = data.summary.ready > 0 && data.summary.conflicts === 0 && !blocked;
     if (canImport && typeof data.checksum === "string" && data.checksum.trim()) typechoReviewed = { file, checksum: data.checksum };
     alertAt("typecho-import-error", blocked || (canImport && !typechoReviewed ? "服务器未返回校验值，请重新预览。" : ""));
-    $("typecho-import-status").textContent = typechoReviewed ? "预览完成，确认列表后可导入并发布。" : "预览完成，未写入知识库。";
+    $("typecho-import-status").textContent = "";
   } catch (error) {
     alertAt("typecho-import-error", error.message);
     $("typecho-import-status").textContent = "";
@@ -766,7 +766,7 @@ $("typecho-import-apply").onclick = async () => {
   // completed the import; the administrator must preview again before retrying.
   typechoReviewed = null;
   alertAt("typecho-import-error");
-  $("typecho-import-status").textContent = "正在导入并发布，请勿离开此页…";
+  $("typecho-import-status").textContent = "正在导入并发布…";
   typechoImportBusy = true;
   updateTypechoControls();
   let refresh = false;

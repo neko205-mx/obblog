@@ -26,7 +26,6 @@
     </nav>
     <section class="settings-panel" id="settings-appearance" role="tabpanel" aria-labelledby="tab-appearance">
       <div class="section-heading"><h2>外观</h2><span id="appearance-state" class="mode-badge" role="status">读取中…</span></div>
-      <p class="field-note">主题色和配色模式仅影响公开博客。</p>
       <fieldset id="accent-field" class="accent-field" disabled>
         <legend>主题色</legend>
         <div id="blog-accent" class="accent-swatches" role="radiogroup" aria-label="主题色"></div>
@@ -62,7 +61,6 @@
     </section>
     <section class="settings-panel" id="settings-general" role="tabpanel" aria-labelledby="tab-general" hidden>
       <div class="section-heading"><h2>常规</h2><span id="prefs-state" class="mode-badge" role="status"></span></div>
-      <p class="field-note">这些开关保存在发布数据目录，按知识库隔离。</p>
       <div id="preference-list"></div>
       <p id="prefs-error" class="settings-error" role="alert" hidden></p>
     </section>
@@ -82,12 +80,10 @@
       </form>
       <section id="standalone-pages" class="settings-section" aria-labelledby="page-list-title">
         <div class="section-heading"><h3 id="page-list-title" tabindex="-1">独立页面</h3><div class="page-editor-actions"><button type="button" id="page-create" disabled>新建页面</button><button type="button" id="page-template-open" aria-expanded="false" aria-controls="page-template-chooser" disabled>使用模板</button></div></div>
-        <p class="field-note">用于关于我、友情链接等不出现在文章列表里的内容。保存后立即公开，并自动加入博客导航。</p>
         <section id="page-template-chooser" class="page-template-chooser" aria-label="选择独立页面模板" hidden>
           <label for="page-template-select">页面模板</label>
-          <select id="page-template-select" aria-describedby="page-template-description page-template-note"></select>
+          <select id="page-template-select" aria-describedby="page-template-description"></select>
           <p id="page-template-description" class="field-note" hidden></p>
-          <p id="page-template-note" class="field-note">模板提供一份起始内容。你仍可编辑 Markdown，确认无误后再发布。</p>
           <div class="page-editor-actions"><button type="button" id="page-template-apply" class="save-button" disabled>创建草稿</button><button type="button" id="page-template-cancel">取消</button></div>
         </section>
         <ul id="page-list" class="page-list" aria-label="独立页面列表"></ul>
@@ -103,7 +99,7 @@
           <div><label for="editor-path">短地址</label><div class="page-path"><code>/pages/</code><input id="editor-path" maxlength="64" autocomplete="off" spellcheck="false" required></div></div>
         </div>
         <div class="page-editor-meta"><span id="editor-status" role="status"></span><span id="page-template-marker" class="page-template-marker" hidden></span><span id="editor-character-count"></span><span>Ctrl / ⌘ S 保存</span></div>
-        <div id="editor-conflict" class="settings-error" hidden><p>服务器上的页面可能已有变化。草稿仍保留在编辑器里。</p><div class="page-editor-actions"><button type="button" id="copy-draft">复制草稿</button><button type="button" id="show-server-note">查看服务器版本</button></div><pre id="server-version" aria-label="服务器当前版本，只读" hidden></pre></div>
+        <div id="editor-conflict" class="settings-error" hidden><p>版本冲突</p><div class="page-editor-actions"><button type="button" id="copy-draft">复制草稿</button><button type="button" id="show-server-note">查看服务器版本</button></div><pre id="server-version" aria-label="服务器当前版本，只读" hidden></pre></div>
         <div class="page-editor-columns">
           <section class="page-source-pane" aria-label="Markdown 源码">
             <div class="page-pane-header"><span>源码</span><div class="page-format" role="group" aria-label="Markdown 格式"><button type="button" data-format="heading" title="二级标题">标题</button><button type="button" data-format="bold" title="加粗">加粗</button><button type="button" data-format="link">链接</button><button type="button" data-format="image">图片链接</button><button type="button" data-format="wiki" title="插入已发布笔记双链">双链</button><button type="button" data-format="list">列表</button></div></div>
@@ -111,20 +107,17 @@
           </section>
           <section id="page-preview-pane" class="page-preview-pane" aria-label="页面预览"><div class="page-pane-header"><span>公开页面预览</span><small id="editor-preview-state" role="status"></small><button type="button" id="editor-preview-toggle" aria-pressed="false" aria-controls="page-preview-pane">仅看预览</button></div><p id="page-preview-warning" class="page-preview-warning" role="status" hidden></p><article id="editor-preview" class="article-body" aria-label="页面预览正文"></article></section>
         </div>
-        <p class="field-note">预览使用公开页的 Markdown 渲染。双链仅匹配已发布笔记；图片可使用 HTTPS 地址。</p>
       </section>
     </section>
 
     <section class="settings-panel" id="settings-git" role="tabpanel" aria-labelledby="tab-git" hidden>
       <div class="section-heading"><h2>Git 管理</h2><span id="git-state" class="mode-badge">尚未检查</span></div>
-      <p class="field-note">检查远端状态、手动拉取更新或推送本地提交。</p>
       <dl class="settings-summary"><dt>分支</dt><dd id="git-branch">—</dd><dt>本地提交</dt><dd id="git-head">—</dd><dt>远端提交</dt><dd id="git-remote">—</dd></dl>
       <div class="settings-actions"><button type="button" id="git-check">检查远端状态</button><button type="button" id="git-pull" disabled>手动拉取更新</button><button type="button" id="git-push" disabled>推送本地提交</button></div>
       <p id="git-message" role="status"></p>
     </section>
     <section class="settings-panel" id="settings-publication" role="tabpanel" aria-labelledby="tab-publication" hidden>
       <div class="section-heading"><h2>发布设置</h2></div>
-      <p class="field-note">只有开启发布的笔记才会出现在公开博客。顶部 YAML 中的 title、date、tags 和 categories 用于公开展示；发布前请检查是否含有不想公开的标签或分类。</p>
       <label for="publication-note">选择笔记</label>
       <select id="publication-note" disabled><option value="">请选择笔记</option></select>
       <div id="publication-controls" hidden>
@@ -137,12 +130,10 @@
       <p id="publication-status" role="status"></p>
       <details class="typecho-import settings-section">
         <summary>Typecho 导入</summary>
-        <p class="field-note">只导入公开的 Markdown 文章，保留标签、分类和原发布时间；跳过草稿、独立页面、密码保护文章和 HTML 文章。导入不会覆盖已有笔记。</p>
-        <p class="field-note">如果知识库使用 Git，请先确认仓库干净并与远端同步；确认导入后会提交并推送新笔记，再公开发布。</p>
         <form id="typecho-import-form">
           <label for="typecho-import-file">Typecho 数据库备份</label>
           <input id="typecho-import-file" name="file" type="file" accept=".sql" aria-describedby="typecho-import-file-hint" required>
-          <p id="typecho-import-file-hint" class="field-note">请选择 UTF-8 编码的 MySQL .sql 文件，最大 32 MiB。选择文件不会上传，点击「预览导入」后才会发送；预览不写入知识库。</p>
+          <p id="typecho-import-file-hint" class="field-note">MySQL .sql · UTF-8 · 最大 32 MiB</p>
           <div class="settings-actions">
             <button id="typecho-import-preview" type="submit" disabled>预览导入</button>
             <button id="typecho-import-apply" class="save-button" type="button" aria-describedby="typecho-import-summary" disabled>确认导入并发布</button>
@@ -161,7 +152,6 @@
     <section class="settings-panel" id="settings-system" role="tabpanel" aria-labelledby="tab-system" hidden>
       <div class="section-heading"><h2>系统设置</h2></div>
       <div id="system-config">
-        <p class="field-note">管理知识库与管理员账号。保存系统配置后需重新登录。</p>
         <p id="settings-loading" role="status">加载中…</p>
         <p id="settings-error" class="settings-error" role="alert" hidden></p>
         <form id="settings-form" hidden>

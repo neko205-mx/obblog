@@ -265,7 +265,7 @@ func (a *App) typechoImport(w http.ResponseWriter, r *http.Request, apply bool) 
 		return
 	}
 	if plan.Summary.Conflicts > 0 {
-		fail(w, 409, "存在同名笔记或不匹配的发布记录，未导入任何文章")
+		fail(w, 409, "笔记路径或发布记录冲突，请重新预览")
 		return
 	}
 	if plan.Summary.Ready == 0 {
@@ -332,6 +332,5 @@ func (a *App) typechoImport(w http.ResponseWriter, r *http.Request, apply bool) 
 		}
 	}
 	plan.Summary.Ready, plan.Summary.Imported = 0, len(created)
-	plan.Message = fmt.Sprintf("已导入并发布 %d 篇文章，保留 Typecho 原发布时间。", len(created))
 	respond(w, plan)
 }

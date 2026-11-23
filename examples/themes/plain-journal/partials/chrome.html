@@ -10,11 +10,10 @@
 <header class="journal-header" id="journal-top">
   <div class="journal-wrap journal-bar">
     <a class="journal-name" href="/">{{.Site.Title}}</a>
-    {{with .Site.Navigation}}
     <nav class="journal-nav" aria-label="站点导航">
-      {{range .}}<a href="{{.URL}}">{{.Title}}</a>{{end}}
+      {{range .Site.Navigation}}<a href="{{.URL}}">{{.Title}}</a>{{end}}
+      <a href="{{.Site.ArchiveURL}}">归档</a>
     </nav>
-    {{end}}
   </div>
 </header>
 {{end}}

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -27,6 +28,9 @@ type Article struct {
 	ID          string                  `json:"id"`
 	Path        string                  `json:"path"`
 	Title       string                  `json:"title"`
+	Tags        []string                `json:"tags,omitempty"`
+	Categories  []string                `json:"categories,omitempty"`
+	Words       int                     `json:"words,omitempty"`
 	Enabled     bool                    `json:"enabled"`
 	PublishedAt time.Time               `json:"publishedAt"`
 	UpdatedAt   time.Time               `json:"updatedAt"`
@@ -34,6 +38,10 @@ type Article struct {
 	Source      string                  `json:"source"`
 	References  map[string]*vault.Entry `json:"references"`
 	Assets      map[string]string       `json:"assets"`
+	// UseFrontMatterDate is true for new records until an administrator sets a
+	// date. Legacy records omitted this field and may have a manual date, so
+	// their published date remains fixed even if the note has a YAML date.
+	UseFrontMatterDate bool `json:"useFrontMatterDate,omitempty"`
 }
 
 // BlogMetadata is the editable presentation of the site. Page edits are a
@@ -151,6 +159,11 @@ func Open(data, source string) (*Store, error) {
 			return nil, errors.New("无效的文章发布记录")
 		}
 		ids[article.ID] = true
+		if article.Words <= 0 {
+			// Backfill just the count from the stored copy. Do not apply YAML
+			// metadata to old posts until the next refresh or republication.
+			article.Words = markdown.WordCount([]byte(article.Source))
+		}
 		for name, blob := range article.Assets {
 			if !vault.ValidPath(name) || vault.Kind(name) != "asset" || !validBlob(blob) {
 				return nil, errors.New("无效的发布附件记录")
@@ -219,7 +232,7 @@ func Published(articles map[string]*Article) []*Article {
 func URL(id string) string { return "/posts/" + id }
 
 func Render(article *Article, articles map[string]*Article) (*markdown.Result, error) {
-	return markdown.RenderWithOptions([]byte(article.Source), article.Path, nil, markdown.RenderOptions{
+	rendered, err := markdown.RenderWithOptions([]byte(article.Source), article.Path, nil, markdown.RenderOptions{
 		Resolve: func(from, target string, wiki bool) (*vault.Entry, error) {
 			if target == "" {
 				return &vault.Entry{Path: article.Path, Kind: "note"}, nil
@@ -247,6 +260,11 @@ func Render(article *Article, articles map[string]*Article) (*markdown.Result, e
 			return "/media/missing"
 		},
 	})
+	if err != nil {
+		return nil, err
+	}
+	rendered.Properties = "" // Raw properties never leave the public renderer.
+	return rendered, nil
 }
 
 func referenceKey(target string, wiki bool) string {
@@ -281,7 +299,11 @@ func (s *Store) Set(v *vault.Vault, name string, enabled bool, date *time.Time, 
 			return nil, err
 		}
 		now := time.Now().UTC()
-		article = Article{ID: hex.EncodeToString(id), Path: name, PublishedAt: now, UpdatedAt: now}
+		article = Article{ID: hex.EncodeToString(id), Path: name, PublishedAt: now, UpdatedAt: now, UseFrontMatterDate: true}
+	}
+	if date != nil {
+		article.PublishedAt = date.UTC()
+		article.UseFrontMatterDate = false
 	}
 	if enabled && (previous == nil || !previous.Enabled) {
 		snapshot, err := v.Scan()
@@ -295,9 +317,6 @@ func (s *Store) Set(v *vault.Vault, name string, enabled bool, date *time.Time, 
 		article = *copy
 	}
 	article.Enabled = enabled
-	if date != nil {
-		article.PublishedAt = date.UTC()
-	}
 	next[name] = &article
 	if s.gitHead != "" {
 		head = s.gitHead
@@ -315,7 +334,11 @@ func (s *Store) copy(v *vault.Vault, snapshot *vault.Snapshot, previous *Article
 	}
 	article := *previous
 	article.Source = string(raw)
-	article.Title = strings.TrimSuffix(path.Base(article.Path), path.Ext(article.Path))
+	meta := markdown.ExtractPublicationFrontMatter(raw)
+	article.Title, article.Tags, article.Categories = meta.Title, meta.Tags, meta.Categories
+	if article.UseFrontMatterDate && !meta.Date.IsZero() && !meta.Date.After(time.Now()) {
+		article.PublishedAt = meta.Date
+	}
 	article.References = map[string]*vault.Entry{}
 	article.Assets = map[string]string{}
 	for _, ref := range markdown.ExtractBody(raw).Links {
@@ -346,8 +369,14 @@ func (s *Store) copy(v *vault.Vault, snapshot *vault.Snapshot, previous *Article
 	if err != nil {
 		return nil, err
 	}
-	if len(rendered.Headings) > 0 && rendered.Headings[0].Level == 1 {
-		article.Title = rendered.Headings[0].Text
+	article.Words = rendered.Words
+	if article.Title == "" {
+		if len(rendered.Headings) > 0 && rendered.Headings[0].Level == 1 {
+			article.Title = strings.TrimSpace(rendered.Headings[0].Text)
+		}
+		if article.Title == "" {
+			article.Title = strings.TrimSuffix(path.Base(article.Path), path.Ext(article.Path))
+		}
 	}
 	oldAssets, _ := json.Marshal(previous.Assets)
 	newAssets, _ := json.Marshal(article.Assets)
@@ -357,7 +386,8 @@ func (s *Store) copy(v *vault.Vault, snapshot *vault.Snapshot, previous *Article
 	if err != nil {
 		return nil, err
 	}
-	if previous.References != nil && (oldRendered.HTML != rendered.HTML || previous.Title != article.Title || string(oldAssets) != string(newAssets)) {
+	if previous.References != nil && (oldRendered.HTML != rendered.HTML || previous.Title != article.Title || string(oldAssets) != string(newAssets) ||
+		!slices.Equal(previous.Tags, article.Tags) || !slices.Equal(previous.Categories, article.Categories)) {
 		article.UpdatedAt = time.Now().UTC()
 		article.Revised = true
 	}
@@ -397,8 +427,8 @@ func (s *Store) copyAsset(v *vault.Vault, name string) (string, error) {
 	return blob, nil
 }
 
-// Refresh publishes only enabled notes. Removed sources are withdrawn; metadata
-// is retained so a later re-publication keeps the original ID and date.
+// Refresh publishes only enabled notes. Removed sources are withdrawn; the
+// original ID and publication date policy are retained for re-publication.
 func (s *Store) Refresh(v *vault.Vault, renames map[string]string, head string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

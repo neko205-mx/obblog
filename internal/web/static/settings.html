@@ -124,11 +124,12 @@
     </section>
     <section class="settings-panel" id="settings-publication" role="tabpanel" aria-labelledby="tab-publication" hidden>
       <div class="section-heading"><h2>发布设置</h2></div>
-      <p class="field-note">选择要管理的笔记。只有开启发布的笔记才会出现在公开博客。</p>
+      <p class="field-note">只有开启发布的笔记才会出现在公开博客。顶部 YAML 中的 title、date、tags 和 categories 用于公开展示；发布前请检查是否含有不想公开的标签或分类。</p>
       <label for="publication-note">选择笔记</label>
       <select id="publication-note" disabled><option value="">请选择笔记</option></select>
       <div id="publication-controls" hidden>
         <label class="publication-toggle" for="publication-enabled"><input id="publication-enabled" type="checkbox" role="switch" disabled>发布到博客</label>
+        <p id="publication-metadata" class="field-note" hidden></p>
         <form id="publication-date-form"><label for="publication-date">发布时间（本地时间）</label><div class="path-picker"><input id="publication-date" type="datetime-local" step="1" required disabled><button type="submit" id="publication-date-save" disabled>保存时间</button></div></form>
         <p><a id="publication-link" target="_blank" rel="noopener" hidden>查看文章 ↗</a></p>
       </div>

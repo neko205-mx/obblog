@@ -54,11 +54,20 @@ type themeLink struct{ Title, URL string }
 type themeSite struct {
 	Title, Description, Author, Footer, Mode, Accent string
 	Navigation                                       []themeLink
+	ArchiveURL                                       string
 }
 type themePost struct {
-	Title, URL, Excerpt, TitleID string
-	PublishedAt, UpdatedAt       time.Time
-	ShowUpdated                  bool
+	Title       string        `json:"title"`
+	URL         string        `json:"url"`
+	Excerpt     string        `json:"-"`
+	TitleID     string        `json:"-"`
+	DateShort   string        `json:"dateShort"`
+	PublishedAt time.Time     `json:"publishedAt"`
+	UpdatedAt   time.Time     `json:"updatedAt"`
+	ShowUpdated bool          `json:"-"`
+	Words       int           `json:"words"`
+	Tags        []archiveTerm `json:"tags"`
+	Categories  []archiveTerm `json:"categories"`
 }
 type themePage struct {
 	Title, URL, Template string
@@ -73,6 +82,7 @@ type themeData struct {
 	Headings    []markdown.Heading
 	FriendLinks []markdown.FriendLink
 	ThemeAttr   template.HTMLAttr
+	Archive     *archiveData
 }
 
 func newThemeData(blog *publication.Blog) themeData {
@@ -82,6 +92,7 @@ func newThemeData(blog *publication.Blog) themeData {
 	data := themeData{Site: themeSite{
 		Title: blog.Title, Description: blog.Description, Author: blog.Author,
 		Footer: blog.Footer, Mode: blog.Theme, Accent: blog.Accent,
+		ArchiveURL: archivePath,
 	}}
 	for _, page := range blog.Pages {
 		data.Site.Navigation = append(data.Site.Navigation, themeLink{page.Title, publication.PageURL(page.Slug)})
@@ -94,7 +105,7 @@ func newThemeData(blog *publication.Blog) themeData {
 
 func themeFunctions(id string) template.FuncMap {
 	return template.FuncMap{
-		"date":    func(t time.Time) string { return t.In(time.FixedZone("CST", 8*60*60)).Format("2006-01-02") },
+		"date":    func(t time.Time) string { return t.In(blogTimeZone).Format("2006-01-02") },
 		"isoDate": func(t time.Time) string { return t.Format(time.RFC3339) },
 		"asset": func(name string) (string, error) {
 			if themeAssetType(name) == "" {
@@ -219,7 +230,7 @@ func (a *App) loadPublicTheme(id string) (publicTheme, error) {
 			if path.Ext(name) != ".html" {
 				continue
 			}
-			if name == "index.html" || name == "post.html" || name == "page.html" {
+			if name == "index.html" || name == "post.html" || name == "page.html" || name == "archive.html" {
 				return theme, errors.New("partials 不可使用入口模板的文件名")
 			}
 			if err := parse("partials/" + name); err != nil {
@@ -233,6 +244,13 @@ func (a *App) loadPublicTheme(id string) (publicTheme, error) {
 		if err := parse(view + ".html"); err != nil {
 			return theme, err
 		}
+	}
+	if _, err := root.Lstat("archive.html"); err == nil {
+		if err := parse("archive.html"); err != nil {
+			return theme, err
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return theme, errors.New("无法读取 archive.html")
 	}
 	theme.pageTemplates, err = loadPageTemplates(root, id, manifest.PageTemplates, tmpl)
 	if err != nil {
@@ -300,6 +318,13 @@ func (t publicTheme) validate() error {
 		fixture.FriendLinks = []markdown.FriendLink{{Title: "示例博客", URL: "https://example.com/", Description: "示例简介", Initial: "示"}}
 		if _, err := t.execute("page", fixture); err != nil {
 			return fmt.Errorf("页面模板 %s: %w", item.ID, err)
+		}
+	}
+	if t.tmpl.Lookup("archive.html") != nil {
+		fixture := data
+		fixture.Archive = &archiveData{Title: "归档", Years: []archiveYear{{Year: "2024", Open: true, Posts: []themePost{post}}}, Matches: 1, Stats: archiveStats{Posts: 1}}
+		if _, err := t.execute("archive", fixture); err != nil {
+			return fmt.Errorf("archive.html: %w", err)
 		}
 	}
 	return nil
@@ -440,6 +465,10 @@ func (a *App) previewTheme(w http.ResponseWriter, r *http.Request) {
 		a.renderPublicIndex(w, &t)
 		return
 	}
+	if target == archivePath {
+		a.renderArchive(w, archiveFilter{}, &t)
+		return
+	}
 	kind, value, ok := strings.Cut(strings.TrimPrefix(target, "/"), "/")
 	if !ok || !strings.HasPrefix(target, "/") || value == "" || strings.Contains(value, "/") {
 		http.NotFound(w, r)
@@ -476,6 +505,9 @@ func (a *App) renderThemedPage(w http.ResponseWriter, view string, data themeDat
 }
 
 func writeThemedPage(w http.ResponseWriter, view string, data themeData, t publicTheme, preview bool) {
+	if view == "archive" && t.info.ID != defaultPublicTheme && t.tmpl.Lookup("archive.html") == nil {
+		t = builtinPublicTheme
+	}
 	body, err := t.execute(view, data)
 	if err != nil && !preview && t.info.ID != defaultPublicTheme {
 		// data still contains only safe Markdown, not untrusted theme markup.
@@ -498,6 +530,11 @@ func writeThemedPage(w http.ResponseWriter, view string, data themeData, t publi
 }
 
 func postThemeSummary(article *publication.Article, rendered *markdown.Result) themePost {
-	return themePost{Title: article.Title, URL: publication.URL(article.ID), Excerpt: rendered.Excerpt,
-		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, ShowUpdated: article.Revised}
+	post := themePost{Title: article.Title, URL: publication.URL(article.ID), DateShort: article.PublishedAt.In(blogTimeZone).Format("01-02"),
+		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, ShowUpdated: article.Revised,
+		Words: article.Words, Tags: articleTerms(article.Tags, false), Categories: articleTerms(article.Categories, true)}
+	if rendered != nil {
+		post.Excerpt = rendered.Excerpt
+	}
+	return post
 }

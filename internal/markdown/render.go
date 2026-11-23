@@ -160,22 +160,35 @@ func RenderWithOptions(raw []byte, from string, snapshot *vault.Snapshot, option
 		plain = append(plain[:140], '…')
 	}
 	result.Excerpt = string(plain)
-	// Count CJK characters individually, and other languages by whitespace-delimited words.
+	result.Words = countWords(source)
+	return result, nil
+}
+
+// WordCount computes the render count from Markdown without generating HTML.
+// Front matter and Obsidian comments do not contribute to this count.
+func WordCount(raw []byte) int {
+	source, _ := splitFrontmatter(normalize(raw))
+	return countWords(maskComments(source))
+}
+
+// Count CJK characters individually and runs of letters or digits as words.
+func countWords(source []byte) int {
+	words := 0
 	inWord := false
 	for _, c := range string(source) {
 		if unicode.Is(unicode.Han, c) || unicode.Is(unicode.Hiragana, c) || unicode.Is(unicode.Katakana, c) {
-			result.Words++
+			words++
 			inWord = false
 		} else if unicode.IsLetter(c) || unicode.IsNumber(c) {
 			if !inWord {
-				result.Words++
+				words++
 			}
 			inWord = true
 		} else {
 			inWord = false
 		}
 	}
-	return result, nil
+	return words
 }
 
 func newMarkdown(options ...goldmark.Option) goldmark.Markdown {

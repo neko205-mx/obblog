@@ -73,6 +73,12 @@ plain-journal/
 
 主题只负责展示公开模型。不要添加 JavaScript、内联事件处理器、PHP 或其他可执行代码。模板没有读取私有笔记、配置或 Git 凭据的接口。主题不接管附件路由；正文中已经生成的文章、独立页面和公开附件链接应原样保留。
 
+## 归档和文章标签
+
+主题可用 `<a href="{{.Site.ArchiveURL}}">归档</a>` 添加入口。文章页的 `.Post.Tags`、`.Post.Categories` 提供 `Name` 和 `URL`；`.Post.Words` 可显示估算字数。
+
+可选的根模板 `archive.html` 覆盖 `/archives`；不提供则使用内置归档。模板可访问 `.Archive.Stats`（`Categories`、`Posts`、`Tags`、`Words`）、`.Archive.Tags`、`.Archive.Categories`（`Name`、`URL`、`Count`、`Selected`），以及 `.Archive.Years`（`Year`、`Open`、`Posts`）。归档文章另提供北京时间的 `.DateShort`（`MM-DD`）。筛选后的 `.Archive.Matches` 不改变全站统计。通过条目 URL 添加或移除筛选；自定义主题继续禁用脚本和表单提交。
+
 ## 给独立页面提供模板
 
 在 `theme.json` 可选的 `pageTemplates` 数组中声明模板（最多 16 个）。例如：

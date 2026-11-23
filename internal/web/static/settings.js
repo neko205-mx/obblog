@@ -490,6 +490,13 @@ function renderPublication() {
   $("publication-refresh").disabled = publicationBusy;
   $("publication-enabled").disabled = publicationBusy || !publicationNote;
   $("publication-enabled").checked = Boolean(publicationRecord?.enabled);
+  const metadata = $("publication-metadata");
+  metadata.hidden = !publicationRecord?.enabled;
+  const labels = [];
+  if (publicationRecord?.title) labels.push(`标题：${publicationRecord.title}`);
+  if (publicationRecord?.tags?.length) labels.push(`标签：${publicationRecord.tags.join("、")}`);
+  if (publicationRecord?.categories?.length) labels.push(`分类：${publicationRecord.categories.join("、")}`);
+  metadata.textContent = labels.join(" · ");
   $("publication-date").disabled = $("publication-date-save").disabled = publicationBusy || !publicationRecord?.id;
   const date = publicationRecord?.publishedAt ? new Date(publicationRecord.publishedAt) : null;
   $("publication-date").value = date ? new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 19) : "";

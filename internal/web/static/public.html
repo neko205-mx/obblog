@@ -1,5 +1,5 @@
 {{define "header"}}
-<header class="site-header"><a class="site-mark" href="/" aria-label="{{.Site.Title}}首页">{{.Site.Title}}<span class="mark-dot"></span></a><nav>{{range .Site.Navigation}}<a href="{{.URL}}">{{.Title}}</a>{{end}}<a href="/">文章</a><a href="/admin/">后台</a></nav></header>
+<header class="site-header"><a class="site-mark" href="/" aria-label="{{.Site.Title}}首页">{{.Site.Title}}<span class="mark-dot"></span></a><nav aria-label="站点导航">{{range .Site.Navigation}}<a href="{{.URL}}">{{.Title}}</a>{{end}}<a href="/">文章</a><a href="/archives"{{if .Archive}} aria-current="page"{{end}}>归档</a><a href="/admin/">后台</a></nav></header>
 {{end}}
 {{define "footer"}}<footer class="site-footer"><a href="/">{{if .Site.Footer}}{{.Site.Footer}}{{else}}{{.Site.Title}}{{end}}</a><a href="#top">回到顶部 ↑</a></footer>{{end}}
 {{define "index"}}<!doctype html>
@@ -7,8 +7,89 @@
 <body id="top">{{template "header" .}}<main class="index-main"><section class="index-heading"><h1>{{.Site.Title}}<span class="title-period">.</span></h1><span class="article-count">{{len .Posts}} 篇文章</span></section>{{if .Site.Description}}<p class="blog-description">{{.Site.Description}}</p>{{end}}
 <div class="article-list">{{range .Posts}}<article class="article-row"><time datetime="{{isoDate .PublishedAt}}">{{date .PublishedAt}}</time><div><h2><a href="{{.URL}}">{{.Title}}</a></h2><p>{{.Excerpt}}</p></div><a class="article-arrow" href="{{.URL}}" aria-label="阅读：{{.Title}}">↗</a></article>{{else}}<p class="empty-message">暂无文章</p>{{end}}</div></main>{{template "footer" .}}</body></html>{{end}}
 {{define "post"}}<!doctype html>
-<html lang="zh-CN"{{.ThemeAttr}}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{.Post.Title}} · {{.Site.Title}}</title><meta name="description" content="{{.Post.Excerpt}}"><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/blog.css"></head>
-<body id="top">{{template "header" .}}<main class="post-main"><a class="back-link" href="/">← 所有文章</a><header class="post-heading" id="{{.Post.TitleID}}"><h1>{{.Post.Title}}</h1>{{if .Site.Author}}<p class="post-author">{{.Site.Author}}</p>{{end}}<div class="post-dates"><span>发布于 <time datetime="{{isoDate .Post.PublishedAt}}">{{date .Post.PublishedAt}}</time></span>{{if .Post.ShowUpdated}}<span>更新于 <time datetime="{{isoDate .Post.UpdatedAt}}">{{date .Post.UpdatedAt}}</time></span>{{end}}</div></header><div class="post-layout"><article class="article-body">{{.Content}}</article>{{if .Headings}}<aside class="post-outline"><details open><summary>目录</summary><nav>{{range .Headings}}<a class="level-{{.Level}}" href="#{{.ID}}">{{.Text}}</a>{{end}}</nav></details></aside>{{end}}</div></main>{{template "footer" .}}</body></html>{{end}}
+<html lang="zh-CN"{{.ThemeAttr}}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{.Post.Title}} · {{.Site.Title}}</title><meta name="description" content="{{.Post.Excerpt}}"><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/blog.css">{{if or .Post.Categories .Post.Tags}}<link rel="stylesheet" href="/archive.css">{{end}}</head>
+<body id="top">{{template "header" .}}<main class="post-main"><a class="back-link" href="/">← 所有文章</a><header class="post-heading" id="{{.Post.TitleID}}"><h1>{{.Post.Title}}</h1>{{if .Site.Author}}<p class="post-author">{{.Site.Author}}</p>{{end}}<div class="post-dates"><span>发布于 <time datetime="{{isoDate .Post.PublishedAt}}">{{date .Post.PublishedAt}}</time></span>{{if .Post.ShowUpdated}}<span>更新于 <time datetime="{{isoDate .Post.UpdatedAt}}">{{date .Post.UpdatedAt}}</time></span>{{end}}</div>
+{{if or .Post.Categories .Post.Tags}}<div class="post-taxonomies">
+{{with .Post.Categories}}<div class="post-taxonomy"><span>分类：</span><ul role="list" aria-label="文章分类">{{range .}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}</ul></div>{{end}}
+{{with .Post.Tags}}<div class="post-taxonomy"><span>标签：</span><ul role="list" aria-label="文章标签">{{range .}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}</ul></div>{{end}}
+</div>{{end}}
+</header><div class="post-layout"><article class="article-body">{{.Content}}</article>{{if .Headings}}<aside class="post-outline"><details open><summary>目录</summary><nav>{{range .Headings}}<a class="level-{{.Level}}" href="#{{.ID}}">{{.Text}}</a>{{end}}</nav></details></aside>{{end}}</div></main>{{template "footer" .}}</body></html>{{end}}
+{{define "archive-filters"}}
+<ul class="archive-filters" role="list">
+  {{range .}}<li><a class="archive-chip" href="{{.URL}}"{{if .Selected}} aria-current="true"{{end}}><span>{{.Name}}</span><span class="archive-chip-count">{{.Count}} 篇</span></a></li>{{end}}
+</ul>
+{{end}}
+{{define "archive"}}<!doctype html>
+<html lang="zh-CN"{{.ThemeAttr}}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Archive.Title}} · {{.Site.Title}}</title>
+  <link rel="stylesheet" href="/theme.css">
+  <link rel="stylesheet" href="/blog.css">
+  <link rel="stylesheet" href="/archive.css">
+</head>
+<body id="top" class="archive-page">
+  {{template "header" .}}
+  <main class="archive-main">
+    {{with .Archive}}
+    <header class="archive-heading">
+      <h1>{{.Title}}</h1>
+      <p class="archive-stats" aria-label="全站统计">
+        <span><strong>{{.Stats.Categories}}</strong> 个分类</span>
+        <span><strong>{{.Stats.Posts}}</strong> 篇文章</span>
+        <span><strong>{{.Stats.Tags}}</strong> 个标签</span>
+        <span>约 <strong>{{.Stats.Words}}</strong> 字</span>
+      </p>
+    </header>
+    <form class="archive-search" role="search" aria-label="搜索归档" action="/archives" method="get">
+      <label for="archive-query">搜索文章</label>
+      <div class="archive-search-controls">
+        <input id="archive-query" name="q" type="search" value="{{.Query}}" placeholder="输入关键词">
+        {{if .Tag}}<input type="hidden" name="tag" value="{{.Tag}}">{{end}}
+        {{if .Category}}<input type="hidden" name="category" value="{{.Category}}">{{end}}
+        <button type="submit">搜索</button>
+      </div>
+    </form>
+    <section class="archive-taxonomy" aria-labelledby="archive-tags">
+      <h2 id="archive-tags">标签</h2>
+      {{with .Tags}}{{template "archive-filters" .}}{{else}}<p class="archive-muted">暂无标签</p>{{end}}
+    </section>
+    <section class="archive-taxonomy" aria-labelledby="archive-categories">
+      <h2 id="archive-categories">分类</h2>
+      {{with .Categories}}{{template "archive-filters" .}}{{else}}<p class="archive-muted">暂无分类</p>{{end}}
+    </section>
+    <section class="archive-results" aria-labelledby="archive-results-title">
+      <div class="archive-results-heading">
+        <h2 id="archive-results-title">文章</h2>
+        {{if or .Query .Tag .Category}}<a href="/archives">清除搜索与筛选</a>{{end}}
+      </div>
+      {{if or .Query .Tag .Category}}<p class="archive-active-filters">
+        {{if .Query}}<span>关键词：{{.Query}}</span>{{end}}
+        {{if .Tag}}<span>标签：{{.Tag}}</span>{{end}}
+        {{if .Category}}<span>分类：{{.Category}}</span>{{end}}
+        <span>找到 {{.Matches}} 篇文章</span>
+      </p>{{end}}
+      {{range .Years}}
+      <details class="archive-year"{{if .Open}} open{{end}}>
+        <summary><span class="archive-year-label">{{.Year}} 年</span><span class="archive-year-count">{{len .Posts}} 篇</span></summary>
+        <ul class="archive-posts" role="list">
+          {{range .Posts}}<li class="archive-post">
+            <time datetime="{{isoDate .PublishedAt}}" title="{{date .PublishedAt}}">{{.DateShort}}</time>
+            <a href="{{.URL}}">{{.Title}}</a>
+            <span class="archive-post-words">约 {{.Words}} 字</span>
+          </li>{{end}}
+        </ul>
+      </details>
+      {{else}}
+      <p class="archive-empty">{{if or .Query .Tag .Category}}没有符合条件的文章。{{else}}暂无已发布文章。{{end}}</p>
+      {{end}}
+    </section>
+    {{end}}
+  </main>
+  {{template "footer" .}}
+</body>
+</html>{{end}}
 {{define "page"}}<!doctype html>
 <html lang="zh-CN"{{.ThemeAttr}}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{.Page.Title}} · {{.Site.Title}}</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/blog.css"></head>
 <body id="top">{{template "header" .}}<main class="post-main"><a class="back-link" href="/">← 所有文章</a><header class="post-heading"><h1>{{.Page.Title}}</h1><div class="post-dates"><span>更新于 <time datetime="{{isoDate .Page.UpdatedAt}}">{{date .Page.UpdatedAt}}</time></span></div></header><div class="post-layout"><article class="article-body">{{.Content}}</article>{{if .Headings}}<aside class="post-outline"><details open><summary>目录</summary><nav>{{range .Headings}}<a class="level-{{.Level}}" href="#{{.ID}}">{{.Text}}</a>{{end}}</nav></details></aside>{{end}}</div></main>{{template "footer" .}}</body></html>{{end}}

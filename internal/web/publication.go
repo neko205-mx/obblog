@@ -30,13 +30,17 @@ type publicationInfo struct {
 	URL         string     `json:"url,omitempty"`
 	PublishedAt *time.Time `json:"publishedAt,omitempty"`
 	UpdatedAt   *time.Time `json:"updatedAt,omitempty"`
+	Title       string     `json:"title,omitempty"`
+	Tags        []string   `json:"tags,omitempty"`
+	Categories  []string   `json:"categories,omitempty"`
 }
 
 func publicationStatus(article *publication.Article) publicationInfo {
 	if article == nil {
 		return publicationInfo{}
 	}
-	return publicationInfo{article.ID, article.Enabled, publication.URL(article.ID), &article.PublishedAt, &article.UpdatedAt}
+	return publicationInfo{ID: article.ID, Enabled: article.Enabled, URL: publication.URL(article.ID),
+		PublishedAt: &article.PublishedAt, UpdatedAt: &article.UpdatedAt, Title: article.Title, Tags: article.Tags, Categories: article.Categories}
 }
 
 func (a *App) publicationStatus(w http.ResponseWriter, r *http.Request) {
@@ -469,9 +473,12 @@ func (a *App) themeRoutes(mux *http.ServeMux) {
 func (a *App) publicRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /{$}", a.publicIndex)
 	mux.HandleFunc("GET /posts/{id}", a.publicPost)
+	mux.HandleFunc("GET "+archivePath, a.publicArchive)
+	mux.HandleFunc("GET /api/posts", a.publicPosts)
 	mux.HandleFunc("GET /pages/{slug}", a.publicStandalone)
 	mux.HandleFunc("GET /media/{id}/{blob}", a.publicAsset)
 	mux.HandleFunc("GET /blog.css", func(w http.ResponseWriter, r *http.Request) { a.static(w, r, "blog.css") })
+	mux.HandleFunc("GET /archive.css", func(w http.ResponseWriter, r *http.Request) { a.static(w, r, "archive.css") })
 	mux.HandleFunc("GET /page-templates.css", func(w http.ResponseWriter, r *http.Request) { a.static(w, r, "page-templates.css") })
 	mux.HandleFunc("GET /theme-assets/{id}/{file...}", a.serveThemeAsset)
 	// Liveness probe for the container runtime. It touches the store so a
@@ -534,7 +541,7 @@ func (a *App) renderPublicPost(w http.ResponseWriter, id string, preview *public
 			return
 		}
 		body, titleID := rendered.HTML, ""
-		if len(rendered.Headings) > 0 && rendered.Headings[0].Level == 1 && strings.HasPrefix(body, "<h1 ") {
+		if len(rendered.Headings) > 0 && rendered.Headings[0].Level == 1 && rendered.Headings[0].Text == article.Title && strings.HasPrefix(body, "<h1 ") {
 			if end := strings.Index(body, "</h1>\n"); end >= 0 {
 				body = body[end+len("</h1>\n"):]
 				titleID = rendered.Headings[0].ID

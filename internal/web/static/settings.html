@@ -21,7 +21,7 @@
       <a id="tab-general" href="?tab=general" role="tab" aria-controls="settings-general" aria-selected="false" tabindex="-1">常规</a>
       <a id="tab-blog" href="?tab=blog" role="tab" aria-controls="settings-blog" aria-selected="false" tabindex="-1">博客</a>
       <a id="tab-git" href="?tab=git" role="tab" aria-controls="settings-git" aria-selected="false" tabindex="-1">Git 管理</a>
-      <a id="tab-publication" href="?tab=publication" role="tab" aria-controls="settings-publication" aria-selected="false" tabindex="-1">发布设置</a>
+      <a id="tab-publication" href="?tab=publication" role="tab" aria-controls="settings-publication" aria-selected="false" tabindex="-1">内容管理</a>
       <a id="tab-system" href="?tab=system" role="tab" aria-controls="settings-system" aria-selected="false" tabindex="-1">系统设置</a>
     </nav>
     <section class="settings-panel" id="settings-appearance" role="tabpanel" aria-labelledby="tab-appearance">
@@ -117,7 +117,36 @@
       <p id="git-message" role="status"></p>
     </section>
     <section class="settings-panel" id="settings-publication" role="tabpanel" aria-labelledby="tab-publication" hidden>
-      <div class="section-heading"><h2>发布设置</h2></div>
+      <div class="section-heading"><h2>内容管理</h2><button type="button" id="publication-refresh">更新已发布文章</button></div>
+      <div class="publication-filters">
+        <input id="publication-search" type="search" aria-label="搜索文章" placeholder="搜索标题或路径">
+        <select id="publication-state" aria-label="发布状态"><option value="all">全部状态</option><option value="online">已上线</option><option value="offline">已下线</option></select>
+        <select id="publication-category" aria-label="分类"><option value="">全部分类</option></select>
+        <select id="publication-tag" aria-label="标签"><option value="">全部标签</option></select>
+      </div>
+      <div class="publication-toolbar">
+        <span id="publication-count" aria-live="polite"></span>
+        <button type="button" id="publication-batch-online" disabled>批量上线</button>
+        <button type="button" id="publication-batch-offline" disabled>批量下线</button>
+      </div>
+      <form id="publication-table-date-form" class="publication-table-date-form" hidden>
+        <label for="publication-table-date" id="publication-table-date-title">发布时间（本地时间）</label>
+        <input id="publication-table-date" type="datetime-local" step="1" required>
+        <button type="submit" id="publication-table-date-save" class="save-button">保存时间</button>
+        <button type="button" id="publication-table-date-cancel">取消</button>
+      </form>
+      <p id="publication-table-status" role="status"></p>
+      <p id="publication-table-error" class="settings-error" role="alert" hidden></p>
+      <button type="button" id="publication-retry" hidden>重新读取</button>
+      <div class="publication-table-scroll" tabindex="0" role="region" aria-label="发布文章">
+        <table class="publication-table">
+          <thead><tr><th scope="col"><input id="publication-select-all" type="checkbox" aria-label="选择当前筛选结果" disabled></th><th scope="col">标题</th><th scope="col">分类 / 标签</th><th scope="col">状态</th><th scope="col">发布时间</th><th scope="col">操作</th></tr></thead>
+          <tbody id="publication-rows"></tbody>
+        </table>
+      </div>
+      <p id="publication-empty" class="field-note" hidden></p>
+      <details id="publication-new" class="settings-section">
+      <summary>发布笔记</summary>
       <label for="publication-note">选择笔记</label>
       <select id="publication-note" disabled><option value="">请选择笔记</option></select>
       <div id="publication-controls" hidden>
@@ -126,8 +155,8 @@
         <form id="publication-date-form"><label for="publication-date">发布时间（本地时间）</label><div class="path-picker"><input id="publication-date" type="datetime-local" step="1" required disabled><button type="submit" id="publication-date-save" disabled>保存时间</button></div></form>
         <p><a id="publication-link" target="_blank" rel="noopener" hidden>查看文章 ↗</a></p>
       </div>
-      <div class="settings-actions"><button type="button" id="publication-refresh">更新已发布文章</button></div>
       <p id="publication-status" role="status"></p>
+      </details>
       <details class="typecho-import settings-section">
         <summary>Typecho 导入</summary>
         <form id="typecho-import-form">

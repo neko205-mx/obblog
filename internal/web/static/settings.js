@@ -483,11 +483,256 @@ $("git-push").onclick = () => gitOperation("push");
 // Publishing uses a fresh revision and Git HEAD for the selected note.
 let notesLoaded = false, notesLoading = false, publicationBusy = false;
 let publicationRequest = 0, publicationNote, publicationRecord;
+let publicationArticles = null, publicationLoading = false, publicationDatePath = null;
+const publicationSelection = new Set();
 const noteQuery = (path) => `?${new URLSearchParams({ path })}`;
+
+function visiblePublications() {
+  const query = $("publication-search").value.trim().toLocaleLowerCase();
+  const state = $("publication-state").value;
+  const category = $("publication-category").value;
+  const tag = $("publication-tag").value;
+  return (publicationArticles || []).filter(article =>
+    (!query || `${article.title} ${article.path}`.toLocaleLowerCase().includes(query)) &&
+    (state !== "online" || article.enabled) && (state !== "offline" || !article.enabled) &&
+    (!category || article.categories?.includes(category)) && (!tag || article.tags?.includes(tag)));
+}
+
+function publicationButton(label, action, disabled = false) {
+  const button = el("button", "", label);
+  button.type = "button";
+  button.disabled = disabled;
+  button.onclick = action;
+  return button;
+}
+
+function renderPublicationSelection(rows) {
+  const selected = rows.filter(row => publicationSelection.has(row.path));
+  const disabled = publicationBusy || publicationLoading;
+  const checkbox = $("publication-select-all");
+  checkbox.disabled = disabled || !rows.length;
+  checkbox.checked = Boolean(rows.length && selected.length === rows.length);
+  checkbox.indeterminate = selected.length > 0 && selected.length < rows.length;
+  $("publication-batch-online").disabled = disabled || !selected.some(row => !row.enabled);
+  $("publication-batch-offline").disabled = disabled || !selected.some(row => row.enabled);
+  $("publication-count").textContent = publicationArticles === null ? "" :
+    `${rows.length} 篇${selected.length ? ` · 已选 ${selected.length} 篇` : ""}`;
+}
+
+function renderPublicationTable() {
+  const rows = visiblePublications();
+  const tbody = $("publication-rows");
+  const disabled = publicationBusy || publicationLoading;
+  tbody.replaceChildren();
+  for (const article of rows) {
+    const title = article.title || article.path;
+    const row = el("tr");
+    const check = el("input");
+    check.type = "checkbox";
+    check.checked = publicationSelection.has(article.path);
+    check.disabled = disabled;
+    check.setAttribute("aria-label", `选择 ${title}`);
+    check.onchange = () => {
+      if (check.checked) publicationSelection.add(article.path);
+      else publicationSelection.delete(article.path);
+      renderPublicationSelection(rows);
+    };
+    const selector = el("td", "publication-row-selector");
+    selector.append(check);
+    const titleCell = el("td", "publication-row-title");
+    if (article.editable === false) titleCell.append(el("strong", "", title));
+    else {
+      const link = el("a", "", title);
+      link.href = `/admin/?${new URLSearchParams({ note: article.path, edit: "1" })}`;
+      titleCell.append(link);
+    }
+    titleCell.append(el("small", "", article.path));
+    const terms = el("td", "publication-row-terms");
+    const categories = article.categories || [];
+    const tags = article.tags || [];
+    if (categories.length) terms.append(el("span", "", categories.join("、")));
+    if (tags.length) terms.append(el("span", "", tags.map(tag => `#${tag}`).join(" ")));
+    if (!categories.length && !tags.length) terms.textContent = "—";
+    const status = el("td");
+    status.append(el("span", article.enabled ? "publication-online" : "publication-offline", article.enabled ? "已上线" : "已下线"));
+    const time = el("td", "publication-row-date");
+    const stamp = new Date(article.publishedAt);
+    if (article.publishedAt && Number.isFinite(stamp.getTime())) {
+      const date = el("time", "", stamp.toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" }));
+      date.dateTime = article.publishedAt;
+      date.title = stamp.toLocaleString("zh-CN");
+      time.append(date);
+    } else time.textContent = "—";
+    const actions = el("td", "publication-row-actions");
+    actions.append(
+      publicationButton(article.enabled ? "下线" : "上线", () => changePublicationState([article.path], !article.enabled), disabled),
+      publicationButton("改时间", () => editPublicationDate(article), disabled),
+    );
+    if (article.enabled && /^\/posts\/[a-z0-9_-]+$/i.test(article.url || "")) {
+      const link = el("a", "", "查看");
+      link.href = article.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      actions.append(link);
+    }
+    row.append(selector, titleCell, terms, status, time, actions);
+    tbody.append(row);
+  }
+  const empty = $("publication-empty");
+  empty.hidden = publicationArticles === null || publicationLoading || rows.length > 0;
+  empty.textContent = publicationArticles?.length ? "没有匹配的文章" : "暂无发布记录";
+  $("publication-refresh").disabled = disabled;
+  $("publication-table-date-save").disabled = disabled;
+  $("publication-table-date").disabled = disabled;
+  $("publication-table-date-cancel").disabled = disabled;
+  renderPublicationSelection(rows);
+}
+
+function fillPublicationFilter(id, field, label) {
+  const select = $(id);
+  const previous = select.value;
+  const values = [...new Set(publicationArticles.flatMap(article => article[field] || []))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  select.replaceChildren(new Option(label, ""), ...values.map(value => new Option(value, value)));
+  select.value = values.includes(previous) ? previous : "";
+}
+
+async function fetchPublications() {
+  const { articles } = await request("/admin/api/publications");
+  if (!Array.isArray(articles)) throw new Error("文章列表格式无效");
+  publicationArticles = articles;
+  fillPublicationFilter("publication-category", "categories", "全部分类");
+  fillPublicationFilter("publication-tag", "tags", "全部标签");
+  const available = new Set(visiblePublications().map(row => row.path));
+  for (const path of publicationSelection) if (!available.has(path)) publicationSelection.delete(path);
+}
+
+async function loadPublicationTable() {
+  if (publicationLoading || publicationBusy || typechoImportBusy) return;
+  publicationLoading = true;
+  $("publication-retry").hidden = true;
+  $("publication-table-status").textContent = "读取中…";
+  alertAt("publication-table-error");
+  renderPublicationTable();
+  try { await fetchPublications(); }
+  catch (error) {
+    alertAt("publication-table-error", `读取失败：${error.message}`);
+    $("publication-retry").hidden = false;
+  } finally {
+    publicationLoading = false;
+    $("publication-table-status").textContent = "";
+    renderPublicationTable();
+  }
+}
+
+async function mutatePublications(action) {
+  if (publicationLoading || publicationBusy || gitBusy || systemBusy || typechoImportBusy) return;
+  publicationBusy = true;
+  $("publication-table-status").textContent = "处理中…";
+  $("publication-retry").hidden = true;
+  alertAt("publication-table-error");
+  renderPublicationTable();
+  renderPublication();
+  let completed = false;
+  try {
+    $("publication-table-status").textContent = await action();
+    completed = true;
+    await fetchPublications();
+  } catch (error) {
+    if (completed) {
+      alertAt("publication-table-error", `列表读取失败：${error.message}`);
+      $("publication-retry").hidden = false;
+    } else {
+      $("publication-table-status").textContent = "";
+      alertAt("publication-table-error", error.message);
+    }
+  } finally {
+    publicationBusy = false;
+    renderPublicationTable();
+    renderPublication();
+  }
+}
+
+function changePublicationState(paths, enabled) {
+  const eligible = new Set((publicationArticles || []).filter(article => article.enabled !== enabled).map(article => article.path));
+  const changes = paths.filter(path => eligible.has(path));
+  if (!changes.length) return;
+  return mutatePublications(async () => {
+    const { changed } = await request("/admin/api/publications/batch", { method: "POST", body: { paths: changes, enabled } });
+    if (!Number.isSafeInteger(changed) || changed < 0 || changed > changes.length) throw new Error("批量操作结果无效");
+    for (const path of changes) publicationSelection.delete(path);
+    // Reflect successful writes even if the subsequent list fetch fails.
+    const affected = new Set(changes);
+    publicationArticles = publicationArticles.map(article => affected.has(article.path) ? { ...article, enabled } : article);
+    if (publicationRecord && affected.has(publicationNote?.path)) publicationRecord = { ...publicationRecord, enabled };
+    return `已${enabled ? "上线" : "下线"} ${changed} 篇`;
+  });
+}
+
+function editPublicationDate(article) {
+  publicationDatePath = article.path;
+  $("publication-table-date-title").textContent = `${article.title || article.path} · 发布时间（本地时间）`;
+  const date = new Date(article.publishedAt);
+  const input = $("publication-table-date");
+  input.value = article.publishedAt && Number.isFinite(date.getTime()) ? new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 19) : "";
+  $("publication-table-date-form").hidden = false;
+  input.focus();
+}
+
+function closePublicationDate() {
+  publicationDatePath = null;
+  $("publication-table-date-form").hidden = true;
+}
+
+function publicationFiltersChanged() {
+  publicationSelection.clear();
+  closePublicationDate();
+  renderPublicationTable();
+}
+
+$("publication-search").oninput = publicationFiltersChanged;
+for (const id of ["publication-state", "publication-category", "publication-tag"]) $(id).onchange = publicationFiltersChanged;
+$("publication-select-all").onchange = (event) => {
+  const rows = visiblePublications();
+  publicationSelection.clear();
+  if (event.target.checked) for (const row of rows) publicationSelection.add(row.path);
+  renderPublicationTable();
+};
+for (const [id, enabled] of [["publication-batch-online", true], ["publication-batch-offline", false]]) {
+  $(id).onclick = () => changePublicationState(visiblePublications().filter(row => publicationSelection.has(row.path)).map(row => row.path), enabled);
+}
+$("publication-table-date-cancel").onclick = closePublicationDate;
+$("publication-table-date-form").onsubmit = (event) => {
+  event.preventDefault();
+  const path = publicationDatePath;
+  if (!path) return;
+  const date = new Date($("publication-table-date").value);
+  if (!Number.isFinite(date.getTime()) || date.getTime() > Date.now() + 60000) {
+    alertAt("publication-table-error", "请输入有效的发布时间，不能晚于当前时间");
+    return;
+  }
+  return mutatePublications(async () => {
+    const publishedAt = date.toISOString();
+    await request("/admin/api/publication", { method: "PATCH", body: { path, publishedAt } });
+    publicationArticles = publicationArticles.map(article => article.path === path ? { ...article, publishedAt } : article);
+    if (publicationRecord && publicationNote?.path === path) publicationRecord = { ...publicationRecord, publishedAt };
+    closePublicationDate();
+    return "发布时间已保存";
+  });
+};
+$("publication-retry").onclick = loadPublicationTable;
+
+function loadPublicationTab() {
+  void loadPublicationTable();
+  const details = $("publication-new");
+  if (new URLSearchParams(location.search).has("note")) details.open = true;
+  if (details.open) void loadPublicationNotes();
+}
+
+$("publication-new").ontoggle = () => { if ($("publication-new").open) void loadPublicationNotes(); };
+
 function renderPublication() {
   $("publication-controls").hidden = !publicationNote;
   $("publication-note").disabled = publicationBusy || notesLoading || !notesLoaded;
-  $("publication-refresh").disabled = publicationBusy;
   $("publication-enabled").disabled = publicationBusy || !publicationNote;
   $("publication-enabled").checked = Boolean(publicationRecord?.enabled);
   const metadata = $("publication-metadata");
@@ -529,7 +774,7 @@ async function selectPublication(path) {
   } catch (error) { if (id === publicationRequest) $("publication-status").textContent = error.message; }
 }
 
-async function loadPublicationTab() {
+async function loadPublicationNotes() {
   if (notesLoading || gitBusy || publicationBusy) return;
   const selected = new URLSearchParams(location.search).get("note") || "";
   if (notesLoaded) {
@@ -568,16 +813,21 @@ $("publication-note").onchange = () => {
 };
 
 async function updatePublication(enabled, date) {
-  if (publicationBusy || gitBusy || systemBusy || typechoImportBusy || !publicationNote) { renderPublication(); return; }
+  if (publicationLoading || publicationBusy || gitBusy || systemBusy || typechoImportBusy || !publicationNote) { renderPublication(); return; }
   const { path, revision, gitHead } = publicationNote;
   publicationBusy = true;
+  renderPublicationTable();
   renderPublication();
   $("publication-status").textContent = "保存中…";
   try {
-    publicationRecord = await request("/admin/api/publication", { method: "PUT", body: { path, enabled, publishedAt: date, revision, gitHead } });
+    publicationRecord = date
+      ? await request("/admin/api/publication", { method: "PATCH", body: { path, publishedAt: date } })
+      : await request("/admin/api/publication", { method: "PUT", body: { path, enabled, revision, gitHead } });
     $("publication-status").textContent = date ? "发布时间已保存" : enabled ? "已发布" : "已取消发布";
+    try { await fetchPublications(); }
+    catch (error) { alertAt("publication-table-error", `列表读取失败：${error.message}`); $("publication-retry").hidden = false; }
   } catch (error) { $("publication-status").textContent = error.message; }
-  finally { publicationBusy = false; renderPublication(); }
+  finally { publicationBusy = false; renderPublication(); renderPublicationTable(); }
 }
 $("publication-enabled").onchange = (event) => updatePublication(event.target.checked);
 $("publication-date-form").onsubmit = (event) => {
@@ -590,23 +840,11 @@ $("publication-date-form").onsubmit = (event) => {
   }
   updatePublication(publicationRecord.enabled, date.toISOString());
 };
-$("publication-refresh").onclick = async () => {
-  if (publicationBusy || gitBusy || notesLoading || systemBusy || typechoImportBusy) return;
-  const path = $("publication-note").value;
-  clearPublication();
-  publicationBusy = true;
-  renderPublication();
-  $("publication-status").textContent = "更新中…";
-  let message = "公开副本已更新";
-  try { await request("/admin/api/publications/refresh", { method: "POST" }); }
-  catch (error) { message = error.message; }
-  finally {
-    if (path) await selectPublication(path);
-    publicationBusy = false;
-    renderPublication();
-    if (!$("publication-status").textContent) $("publication-status").textContent = message;
-  }
-};
+$("publication-refresh").onclick = () => mutatePublications(async () => {
+  await request("/admin/api/publications/refresh", { method: "POST" });
+  if ($("publication-note").value) await selectPublication($("publication-note").value);
+  return "公开副本已更新";
+});
 
 // Typecho import is a two-step, explicitly submitted multipart upload.
 const typechoImportURL = "/admin/api/import/typecho/";

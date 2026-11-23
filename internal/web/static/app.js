@@ -281,6 +281,7 @@ async function exitEditor() {
 
 async function startEditor(note, isNew = false) {
   attachment.close(false);
+  const request = state.request;
   if (state.vault.saveMode === "git") {
     try {
       const git = await api("/admin/api/git");
@@ -289,6 +290,7 @@ async function startEditor(note, isNew = false) {
       note = { ...note, gitHead: git.head };
     } catch (error) { toast(error.message); return; }
   }
+  if (!isNew && (request !== state.request || state.view !== "note" || state.current !== note.path || state.note?.revision !== note.revision || editor.active)) return;
   state.view = "edit";
   state.current = note.path;
   state.note = note;
@@ -484,6 +486,10 @@ async function openNote(path, options = {}) {
     if (request !== state.request) return;
     state.note = note;
     renderDocument();
+    if (options.edit && state.vault?.writable) {
+      await startEditor(note);
+      return;
+    }
     requestAnimationFrame(() => scrollToFragment(fragment));
   } catch (error) {
     if (request !== state.request) return;
@@ -511,7 +517,7 @@ async function loadVault(initial = false) {
       if (requested || welcome) {
         const path = requested || welcome.path;
         if (!requested) history.replaceState(null, "", noteURL(path));
-        await openNote(path, { history: false, fragment: location.hash });
+        await openNote(path, { history: false, fragment: location.hash, edit: Boolean(requested && params.get("edit") === "1") });
       } else showEmpty("暂无笔记");
     } else {
       if (state.view === "graph") await graphView.load(true);

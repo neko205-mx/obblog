@@ -130,6 +130,8 @@ func (a *App) Handler() http.Handler {
 	private.HandleFunc("GET /api/publication", a.publicationStatus)
 	private.HandleFunc("PUT /api/publication", a.setPublication)
 	private.HandleFunc("POST /api/publications/refresh", a.refreshPublications)
+	private.HandleFunc("POST /api/import/typecho/preview", a.previewTypechoImport)
+	private.HandleFunc("POST /api/import/typecho/apply", a.applyTypechoImport)
 	private.HandleFunc("GET /api/blog", a.blogSettings)
 	private.HandleFunc("POST /api/blog", a.saveBlogSettings)
 	private.HandleFunc("GET /api/themes", a.themeStatus)

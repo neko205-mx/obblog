@@ -453,7 +453,7 @@ function renderGit() {
 }
 
 async function gitOperation(action = "check") {
-  if (gitBusy || publicationBusy || systemBusy) return;
+  if (gitBusy || publicationBusy || systemBusy || typechoImportBusy) return;
   gitBusy = true;
   renderGit();
   $("git-message").textContent = action === "check" ? "正在核对远端…" : "同步中…";
@@ -568,7 +568,7 @@ $("publication-note").onchange = () => {
 };
 
 async function updatePublication(enabled, date) {
-  if (publicationBusy || gitBusy || systemBusy || !publicationNote) { renderPublication(); return; }
+  if (publicationBusy || gitBusy || systemBusy || typechoImportBusy || !publicationNote) { renderPublication(); return; }
   const { path, revision, gitHead } = publicationNote;
   publicationBusy = true;
   renderPublication();
@@ -591,7 +591,7 @@ $("publication-date-form").onsubmit = (event) => {
   updatePublication(publicationRecord.enabled, date.toISOString());
 };
 $("publication-refresh").onclick = async () => {
-  if (publicationBusy || gitBusy || notesLoading || systemBusy) return;
+  if (publicationBusy || gitBusy || notesLoading || systemBusy || typechoImportBusy) return;
   const path = $("publication-note").value;
   clearPublication();
   publicationBusy = true;
@@ -607,6 +607,190 @@ $("publication-refresh").onclick = async () => {
     if (!$("publication-status").textContent) $("publication-status").textContent = message;
   }
 };
+
+// Typecho import is a two-step, explicitly submitted multipart upload.
+const typechoImportURL = "/admin/api/import/typecho/";
+const maxTypechoImportBytes = 32 * 1024 * 1024;
+const typechoStatuses = { ready: "待导入", existing: "已存在", conflict: "路径冲突", imported: "已导入" };
+const typechoSkipLabels = {
+  nonPost: "非文章（含独立页面）", nonPublic: "未公开或受密码保护", invalidDate: "日期无效或在未来",
+  nonMarkdown: "非 Markdown", invalidData: "数据不完整", tooLarge: "正文超出大小限制",
+};
+const typechoDate = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Shanghai" });
+const typechoFile = $("typecho-import-file");
+let typechoImportBusy = false, typechoReviewed = null;
+
+function typechoFileError(file) {
+  if (!file) return "请选择 Typecho 的 .sql 备份。";
+  if (!/\.sql$/i.test(file.name)) return "仅支持 .sql 备份文件。";
+  if (file.size === 0) return "所选备份为空。";
+  if (file.size > maxTypechoImportBytes) return "备份不能超过 32 MiB。";
+  return "";
+}
+
+function updateTypechoControls() {
+  const file = typechoFile.files[0];
+  typechoFile.disabled = typechoImportBusy;
+  $("typecho-import-preview").disabled = typechoImportBusy || Boolean(typechoFileError(file));
+  $("typecho-import-apply").disabled = typechoImportBusy || !typechoReviewed || typechoReviewed.file !== file;
+  $("typecho-import-form").setAttribute("aria-busy", String(typechoImportBusy));
+}
+
+function hideTypechoResult() {
+  $("typecho-import-result").hidden = true;
+  $("typecho-import-posts").replaceChildren();
+  $("typecho-import-summary").textContent = "";
+}
+
+async function requestTypecho(action, file, checksum) {
+  const body = new FormData();
+  body.append("file", file);
+  if (action === "apply") body.append("checksum", checksum);
+  const response = await fetch(typechoImportURL + action, { method: "POST", cache: "no-store", body });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(response.status === 401 ? "会话已过期，请重新登录" : data?.error || data?.message || `导入请求失败（${response.status}）`);
+  }
+  if (!Array.isArray(data?.posts) || !["ready", "existing", "conflicts", "skipped"].every(key => Number.isSafeInteger(data.summary?.[key]) && data.summary[key] >= 0)) {
+    throw new Error("服务器没有返回有效的导入结果，请重新预览。");
+  }
+  return data;
+}
+
+function safeTypechoPostURL(value) {
+  if (typeof value !== "string" || !value) return null;
+  try {
+    const url = new URL(value, location.origin);
+    if (url.origin === location.origin && !url.username && !url.password && /^\/posts\/[a-z0-9_-]+$/i.test(url.pathname)) return url.pathname;
+  } catch { /* Ignore malformed or non-public article links. */ }
+  return null;
+}
+
+function renderTypechoResult(data, applied) {
+  const { ready, existing, conflicts, skipped } = data.summary;
+  const visibleStatuses = applied ? ["imported", "existing"] : ["ready", "existing", "conflict"];
+  const posts = data.posts.filter(post => post && visibleStatuses.includes(post.status));
+  const imported = Number.isSafeInteger(data.summary.imported) && data.summary.imported >= 0
+    ? data.summary.imported : posts.filter(post => post.status === "imported").length;
+  $("typecho-import-result-title").textContent = applied ? "导入结果" : "导入检查结果";
+  $("typecho-import-summary").textContent = [
+    applied ? `已导入 ${imported} 篇` : `待导入 ${ready} 篇`,
+    `已存在 ${existing} 篇`, `冲突 ${conflicts} 篇`, `跳过 ${skipped} 条`,
+  ].join(" · ");
+  const skippedSummary = [];
+  for (const [key, label] of Object.entries(typechoSkipLabels)) {
+    const count = data.skippedReasons?.[key];
+    if (Number.isSafeInteger(count) && count > 0) skippedSummary.push(`${label} ${count} 条`);
+  }
+  const skippedNode = $("typecho-import-skipped");
+  skippedNode.textContent = skippedSummary.length ? `跳过原因：${skippedSummary.join("、")}` : "";
+  skippedNode.hidden = !skippedSummary.length;
+  const list = $("typecho-import-posts");
+  list.replaceChildren();
+  for (const post of posts) {
+    const row = el("li", "typecho-import-post");
+    const heading = el("div", "typecho-import-post-heading");
+    heading.append(el("strong", "", post.title || "无标题"), el("span", "mode-badge", typechoStatuses[post.status]));
+    row.append(heading);
+    const metadata = el("div", "typecho-import-post-meta");
+    if (typeof post.publishedAt === "string" && Number.isFinite(Date.parse(post.publishedAt))) {
+      const date = el("time", "", typechoDate.format(new Date(post.publishedAt)));
+      date.dateTime = post.publishedAt;
+      metadata.append(date);
+    }
+    if (typeof post.path === "string" && post.path) metadata.append(el("code", "", post.path));
+    else if (typeof post.slug === "string" && post.slug) metadata.append(el("code", "", post.slug));
+    for (const [key, label] of [["tags", "标签"], ["categories", "分类"]]) {
+      if (!Array.isArray(post[key])) continue;
+      const values = post[key].filter(value => typeof value === "string" && value);
+      if (values.length) metadata.append(el("span", "", `${label}：${values.join("、")}`));
+    }
+    const url = ["existing", "imported"].includes(post.status) ? safeTypechoPostURL(post.url) : null;
+    if (url) {
+      const link = el("a", "", "查看文章 ↗");
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      metadata.append(link);
+    }
+    row.append(metadata);
+    list.append(row);
+  }
+  list.hidden = posts.length === 0;
+  $("typecho-import-result").hidden = false;
+}
+
+typechoFile.onchange = () => {
+  typechoReviewed = null;
+  hideTypechoResult();
+  $("typecho-import-status").textContent = "";
+  alertAt("typecho-import-error", typechoFile.files[0] ? typechoFileError(typechoFile.files[0]) : "");
+  updateTypechoControls();
+};
+
+$("typecho-import-form").onsubmit = async (event) => {
+  event.preventDefault();
+  if (typechoImportBusy) return;
+  const file = typechoFile.files[0];
+  const invalid = typechoFileError(file);
+  if (invalid) { alertAt("typecho-import-error", invalid); return; }
+  typechoReviewed = null;
+  hideTypechoResult();
+  alertAt("typecho-import-error");
+  $("typecho-import-status").textContent = "正在上传并检查备份…";
+  typechoImportBusy = true;
+  updateTypechoControls();
+  try {
+    const data = await requestTypecho("preview", file);
+    if (typechoFile.files[0] !== file) return;
+    renderTypechoResult(data, false);
+    const blocked = data.blocked || (data.summary.conflicts ? "存在路径冲突，未写入任何笔记。请解决冲突后重新预览。" : "");
+    const canImport = data.summary.ready > 0 && data.summary.conflicts === 0 && !blocked;
+    if (canImport && typeof data.checksum === "string" && data.checksum.trim()) typechoReviewed = { file, checksum: data.checksum };
+    alertAt("typecho-import-error", blocked || (canImport && !typechoReviewed ? "服务器未返回校验值，请重新预览。" : ""));
+    $("typecho-import-status").textContent = typechoReviewed ? "预览完成，确认列表后可导入并发布。" : "预览完成，未写入知识库。";
+  } catch (error) {
+    alertAt("typecho-import-error", error.message);
+    $("typecho-import-status").textContent = "";
+  } finally {
+    typechoImportBusy = false;
+    updateTypechoControls();
+  }
+};
+
+$("typecho-import-apply").onclick = async () => {
+  if (typechoImportBusy || !typechoReviewed || typechoReviewed.file !== typechoFile.files[0]) return;
+  if (workInProgress()) { alertAt("typecho-import-error", "后台正在保存或同步，请稍候再确认导入。"); return; }
+  const { file, checksum } = typechoReviewed;
+  // Any apply attempt consumes the review. A lost response may still have
+  // completed the import; the administrator must preview again before retrying.
+  typechoReviewed = null;
+  alertAt("typecho-import-error");
+  $("typecho-import-status").textContent = "正在导入并发布，请勿离开此页…";
+  typechoImportBusy = true;
+  updateTypechoControls();
+  let refresh = false;
+  try {
+    const data = await requestTypecho("apply", file, checksum);
+    renderTypechoResult(data, true);
+    if (data.blocked) alertAt("typecho-import-error", data.blocked);
+    $("typecho-import-status").textContent = data.message || (data.blocked ? "导入已阻止。" : "导入完成。");
+    refresh = !data.blocked;
+    if (refresh) typechoFile.value = "";
+  } catch (error) {
+    hideTypechoResult();
+    alertAt("typecho-import-error", `${error.message} 请重新预览以确认当前状态。`);
+    $("typecho-import-status").textContent = "";
+  } finally {
+    typechoImportBusy = false;
+    updateTypechoControls();
+  }
+  if (refresh) {
+    notesLoaded = false;
+    if (currentTab === "publication") loadPublicationTab();
+  }
+};
+updateTypechoControls();
 
 // Version and updates now live under System, not a separate Tools tab.
 let versionBusy = false, versionLoaded = false;
@@ -734,7 +918,7 @@ document.querySelector(".settings-tabs").onkeydown = (event) => {
 };
 window.addEventListener("popstate", () => { if (context) showTab(selectedTab()); });
 
-function workInProgress() { return systemBusy || siteBusy || themeSaving || preferencesBusy || gitBusy || publicationBusy || versionBusy || pages.busy; }
+function workInProgress() { return systemBusy || siteBusy || themeSaving || preferencesBusy || gitBusy || publicationBusy || typechoImportBusy || versionBusy || pages.busy; }
 function canLeave() {
   if (workInProgress()) { alertAt("settings-notice", "正在保存或同步，请稍候"); return false; }
   return !(systemDirty || blogDirty || pages.dirty) || window.confirm("还有未保存的设置，是否放弃修改？");

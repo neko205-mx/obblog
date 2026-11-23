@@ -73,6 +73,16 @@ code, pre { font-family: var(--mono); }
 .pref-text small { color: var(--muted); }
 .publication-toggle, .clear-token { display: flex; align-items: center; gap: 8px; }
 #publication-date { max-width: 260px; }
+.typecho-import > summary { cursor: pointer; color: var(--heading); font-weight: 600; }
+.typecho-import[open] > summary { margin-bottom: 10px; }
+.typecho-import input[type=file] { max-width: 520px; }
+.typecho-import .settings-actions { margin-top: 12px; }
+.typecho-import-posts { list-style: none; margin: 8px 0 0; padding: 0; max-height: 26rem; overflow: auto; }
+.typecho-import-post { padding: 10px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.typecho-import-summary { margin: 0; color: var(--muted); }
+.typecho-import-post-heading, .typecho-import-post-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px; }
+.typecho-import-post-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.typecho-import-post-meta > * { min-width: 0; }
 .version-notes { margin-top: 14px; }
 .version-notes pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .directory-browser { margin-top: 12px; background: var(--raised); border: 1px solid var(--border); border-radius: 7px; padding: 14px; }

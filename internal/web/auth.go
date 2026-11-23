@@ -119,7 +119,7 @@ func (a *App) gate(next http.Handler) http.Handler {
 			return
 		}
 		// Keep directory reads coherent with a Git checkout or note save.
-		if r.Method == "GET" || r.URL.Path == "/admin/api/preview" {
+		if r.Method == "GET" || r.URL.Path == "/admin/api/preview" || r.URL.Path == "/admin/api/import/typecho/preview" {
 			a.opMu.RLock()
 			defer a.opMu.RUnlock()
 		} else {

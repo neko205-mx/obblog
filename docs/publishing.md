@@ -68,6 +68,10 @@ categories: [技术]
 
 公开接口 `GET /api/posts` 与归档页共用筛选逻辑。例如 `/api/posts?tag=Go&page=1&limit=20`。`tag` 和 `category` 忽略大小写、精确匹配；`q` 为子串匹配，同时提供的条件取交集。`page` 从 1 开始，`limit` 默认 20、最大 100。返回 `posts`、匹配数 `total`、全站 `stats`、可用 `tags` 和 `categories`，不返回原始正文或文件路径。
 
+## 从 Typecho 迁移
+
+可以在发布设置中上传 MySQL 备份、预览并导入旧文章，保留发布日期和标签。详见 [Typecho 后台导入](typecho-web-import.md)。
+
 ## 更新
 
 手动 Git 拉取/推送成功、网页保存成功后，更新已开启发布的副本。网页文件已经写入但推送失败时不更新公开内容；在 Git 管理中重试推送后更新。未启用 Git 时，网页保存更新副本；Obsidian 等外部程序修改目录后，在发布弹窗点击“更新已发布文章”。普通刷新、登录和公开页面请求不更新正文。

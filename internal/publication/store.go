@@ -42,6 +42,8 @@ type Article struct {
 	// date. Legacy records omitted this field and may have a manual date, so
 	// their published date remains fixed even if the note has a YAML date.
 	UseFrontMatterDate bool `json:"useFrontMatterDate,omitempty"`
+	// Never resolve references from imported documents against the live vault.
+	ExternalImport bool `json:"externalImport,omitempty"`
 }
 
 // BlogMetadata is the editable presentation of the site. Page edits are a
@@ -332,6 +334,10 @@ func (s *Store) copy(v *vault.Vault, snapshot *vault.Snapshot, previous *Article
 	if err != nil {
 		return nil, err
 	}
+	return s.copySource(v, snapshot, previous, raw)
+}
+
+func (s *Store) copySource(v *vault.Vault, snapshot *vault.Snapshot, previous *Article, raw []byte) (*Article, error) {
 	article := *previous
 	article.Source = string(raw)
 	meta := markdown.ExtractPublicationFrontMatter(raw)
@@ -341,8 +347,13 @@ func (s *Store) copy(v *vault.Vault, snapshot *vault.Snapshot, previous *Article
 	}
 	article.References = map[string]*vault.Entry{}
 	article.Assets = map[string]string{}
-	for _, ref := range markdown.ExtractBody(raw).Links {
+	var refs []markdown.Reference
+	if !article.ExternalImport {
+		refs = markdown.ExtractBody(raw).Links
+	}
+	for _, ref := range refs {
 		var entry *vault.Entry
+		var err error
 		if ref.Wiki {
 			entry, err = snapshot.ResolveWiki(article.Path, ref.Target)
 		} else {

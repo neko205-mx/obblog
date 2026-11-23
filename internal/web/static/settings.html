@@ -135,6 +135,28 @@
       </div>
       <div class="settings-actions"><button type="button" id="publication-refresh">更新已发布文章</button></div>
       <p id="publication-status" role="status"></p>
+      <details class="typecho-import settings-section">
+        <summary>Typecho 导入</summary>
+        <p class="field-note">只导入公开的 Markdown 文章，保留标签、分类和原发布时间；跳过草稿、独立页面、密码保护文章和 HTML 文章。导入不会覆盖已有笔记。</p>
+        <p class="field-note">如果知识库使用 Git，请先确认仓库干净并与远端同步；确认导入后会提交并推送新笔记，再公开发布。</p>
+        <form id="typecho-import-form">
+          <label for="typecho-import-file">Typecho 数据库备份</label>
+          <input id="typecho-import-file" name="file" type="file" accept=".sql" aria-describedby="typecho-import-file-hint" required>
+          <p id="typecho-import-file-hint" class="field-note">请选择 UTF-8 编码的 MySQL .sql 文件，最大 32 MiB。选择文件不会上传，点击「预览导入」后才会发送；预览不写入知识库。</p>
+          <div class="settings-actions">
+            <button id="typecho-import-preview" type="submit" disabled>预览导入</button>
+            <button id="typecho-import-apply" class="save-button" type="button" aria-describedby="typecho-import-summary" disabled>确认导入并发布</button>
+          </div>
+        </form>
+        <p id="typecho-import-status" role="status"></p>
+        <p id="typecho-import-error" class="settings-error" role="alert" hidden></p>
+        <section id="typecho-import-result" aria-labelledby="typecho-import-result-title" hidden>
+          <h3 id="typecho-import-result-title">导入检查结果</h3>
+          <p id="typecho-import-summary" class="typecho-import-summary"></p>
+          <p id="typecho-import-skipped" class="field-note" hidden></p>
+          <ul id="typecho-import-posts" class="typecho-import-posts" aria-label="导入文章列表"></ul>
+        </section>
+      </details>
     </section>
     <section class="settings-panel" id="settings-system" role="tabpanel" aria-labelledby="tab-system" hidden>
       <div class="section-heading"><h2>系统设置</h2></div>
